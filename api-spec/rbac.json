@@ -1,0 +1,132 @@
+{
+  "roles": {
+    "Admin": {
+      "description": "Administrador del sistema con acceso completo",
+      "permissions": {
+        "products": { "create": true, "read": true, "update": true, "delete": true },
+        "inventory": { "create": true, "read": true, "update": true, "delete": true },
+        "recepciones": { "create": true, "read": true, "update": true, "delete": true },
+        "transferencias": { "create": true, "read": true, "update": true, "delete": true },
+        "proveedores": { "create": true, "read": true, "update": true, "delete": true },
+        "sales": { "create": true, "read": true, "update": true, "delete": true },
+        "orders": { "create": true, "read": true, "update": true, "delete": true },
+        "customers": { "create": true, "read": true, "update": true, "delete": true },
+        "accounting": { "create": true, "read": true, "update": true, "delete": true, "approve": true, "post": true },
+        "rrhh": { "create": true, "read": true, "update": true, "delete": true, "process_payroll": true },
+        "admin": { "create": true, "read": true, "update": true, "delete": true },
+        "reports": { "read": true, "generate": true, "export": true },
+        "forecast": { "read": true, "calculate": true, "configure": true }
+      }
+    },
+    "Cajero": {
+      "description": "Cajero con acceso a ventas y POS",
+      "permissions": {
+        "products": { "create": false, "read": true, "update": false, "delete": false },
+        "inventory": { "create": false, "read": true, "update": false, "delete": false },
+        "sales": { "create": true, "read": true, "update": true, "delete": false },
+        "orders": { "create": true, "read": true, "update": true, "delete": false },
+        "customers": { "create": true, "read": true, "update": true, "delete": false },
+        "accounting": { "create": false, "read": false, "update": false, "delete": false },
+        "rrhh": { "create": false, "read": false, "update": false, "delete": false },
+        "admin": { "create": false, "read": false, "update": false, "delete": false },
+        "reports": { "read": true, "generate": false, "export": false },
+        "forecast": { "read": false, "calculate": false, "configure": false }
+      }
+    },
+    "Bodeguero": {
+      "description": "Bodeguero con acceso a inventario y recepciones",
+      "permissions": {
+        "products": { "create": false, "read": true, "update": false, "delete": false },
+        "inventory": { "create": true, "read": true, "update": true, "delete": false },
+        "recepciones": { "create": true, "read": true, "update": true, "delete": false },
+        "transferencias": { "create": true, "read": true, "update": true, "delete": false },
+        "proveedores": { "create": false, "read": true, "update": false, "delete": false },
+        "sales": { "create": false, "read": true, "update": false, "delete": false },
+        "orders": { "create": false, "read": true, "update": false, "delete": false },
+        "customers": { "create": false, "read": false, "update": false, "delete": false },
+        "accounting": { "create": false, "read": false, "update": false, "delete": false },
+        "rrhh": { "create": false, "read": false, "update": false, "delete": false },
+        "admin": { "create": false, "read": false, "update": false, "delete": false },
+        "reports": { "read": true, "generate": false, "export": false },
+        "forecast": { "read": false, "calculate": false, "configure": false }
+      }
+    },
+    "Contador": {
+      "description": "Contador con acceso a contabilidad",
+      "permissions": {
+        "products": { "create": false, "read": true, "update": false, "delete": false },
+        "inventory": { "create": false, "read": true, "update": false, "delete": false },
+        "sales": { "create": false, "read": true, "update": false, "delete": false },
+        "orders": { "create": false, "read": true, "update": false, "delete": false },
+        "customers": { "create": false, "read": true, "update": false, "delete": false },
+        "accounting": { "create": true, "read": true, "update": true, "delete": false, "approve": true, "post": true },
+        "rrhh": { "create": false, "read": false, "update": false, "delete": false },
+        "admin": { "create": false, "read": false, "update": false, "delete": false },
+        "reports": { "read": true, "generate": true, "export": true },
+        "forecast": { "read": false, "calculate": false, "configure": false }
+      }
+    },
+    "RRHH": {
+      "description": "Recursos Humanos con acceso a empleados y nómina",
+      "permissions": {
+        "products": { "create": false, "read": false, "update": false, "delete": false },
+        "inventory": { "create": false, "read": false, "update": false, "delete": false },
+        "sales": { "create": false, "read": false, "update": false, "delete": false },
+        "orders": { "create": false, "read": false, "update": false, "delete": false },
+        "customers": { "create": false, "read": false, "update": false, "delete": false },
+        "accounting": { "create": false, "read": false, "update": false, "delete": false },
+        "rrhh": { "create": true, "read": true, "update": true, "delete": false, "process_payroll": true },
+        "admin": { "create": false, "read": false, "update": false, "delete": false },
+        "reports": { "read": true, "generate": true, "export": true },
+        "forecast": { "read": false, "calculate": false, "configure": false }
+      }
+    },
+    "Viewer": {
+      "description": "Solo lectura en todos los módulos",
+      "permissions": {
+        "products": { "create": false, "read": true, "update": false, "delete": false },
+        "inventory": { "create": false, "read": true, "update": false, "delete": false },
+        "recepciones": { "create": false, "read": true, "update": false, "delete": false },
+        "transferencias": { "create": false, "read": true, "update": false, "delete": false },
+        "proveedores": { "create": false, "read": true, "update": false, "delete": false },
+        "sales": { "create": false, "read": true, "update": false, "delete": false },
+        "orders": { "create": false, "read": true, "update": false, "delete": false },
+        "customers": { "create": false, "read": true, "update": false, "delete": false },
+        "accounting": { "create": false, "read": true, "update": false, "delete": false, "approve": false, "post": false },
+        "rrhh": { "create": false, "read": true, "update": false, "delete": false, "process_payroll": false },
+        "admin": { "create": false, "read": true, "update": false, "delete": false },
+        "reports": { "read": true, "generate": false, "export": false },
+        "forecast": { "read": true, "calculate": false, "configure": false }
+      }
+    }
+  },
+  "resources": {
+    "products": "Gestión de productos TCG",
+    "inventory": "Gestión de inventario y stock",
+    "recepciones": "Recepciones de productos",
+    "transferencias": "Transferencias entre sucursales",
+    "proveedores": "Gestión de proveedores",
+    "sales": "Ventas y transacciones",
+    "orders": "Órdenes de clientes",
+    "customers": "Gestión de clientes",
+    "accounting": "Contabilidad y libros contables",
+    "rrhh": "Recursos Humanos",
+    "admin": "Administración del sistema",
+    "reports": "Reportes y estadísticas",
+    "forecast": "Proyecciones y forecast"
+  },
+  "actions": {
+    "create": "Crear nuevo recurso",
+    "read": "Leer/consultar recursos",
+    "update": "Actualizar recursos existentes",
+    "delete": "Eliminar recursos",
+    "approve": "Aprobar recursos (ej: asientos contables)",
+    "post": "Contabilizar recursos (ej: asientos)",
+    "process_payroll": "Procesar nómina",
+    "generate": "Generar reportes",
+    "export": "Exportar datos",
+    "calculate": "Calcular forecast",
+    "configure": "Configurar forecast"
+  }
+}
+

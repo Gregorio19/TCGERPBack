@@ -1,0 +1,349 @@
+{
+  "validations": {
+    "Product": {
+      "nombre": {
+        "required": true,
+        "type": "string",
+        "maxLength": 200,
+        "minLength": 1
+      },
+      "sku": {
+        "required": false,
+        "type": "string",
+        "unique": true,
+        "pattern": "^[A-Z0-9-]+$",
+        "maxLength": 50
+      },
+      "precio": {
+        "required": true,
+        "type": "integer",
+        "min": 1,
+        "max": 1000000000
+      },
+      "stock": {
+        "required": true,
+        "type": "integer",
+        "min": 0
+      },
+      "tipo": {
+        "required": false,
+        "type": "enum",
+        "enum": ["single", "sellado", "bundle", "collection"]
+      },
+      "conditional": {
+        "if": { "tipo": "single" },
+        "then": {
+          "nro_coleccionista": { "required": true },
+          "rareza": { "required": true },
+          "condicion": { "required": true },
+          "idioma": { "required": true }
+        }
+      }
+    },
+    "Order": {
+      "clienteId": {
+        "required": true,
+        "type": "uuid"
+      },
+      "items": {
+        "required": true,
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 100
+      },
+      "total": {
+        "required": true,
+        "type": "integer",
+        "min": 1,
+        "custom": "total === sum(items.total)"
+      },
+      "estado": {
+        "required": true,
+        "type": "enum",
+        "enum": ["pendiente", "confirmada", "en_proceso", "enviada", "entregada", "completada", "cancelada", "reembolsada", "devuelta"]
+      }
+    },
+    "Customer": {
+      "nombre": {
+        "required": true,
+        "type": "string",
+        "maxLength": 100
+      },
+      "apellido": {
+        "required": true,
+        "type": "string",
+        "maxLength": 100
+      },
+      "email": {
+        "required": true,
+        "type": "email",
+        "unique": true,
+        "pattern": "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$"
+      },
+      "rut": {
+        "required": true,
+        "type": "string",
+        "unique": true,
+        "pattern": "^\\d{1,2}\\.\\d{3}\\.\\d{3}-[\\dkK]$",
+        "custom": "validarDigitoVerificador"
+      },
+      "telefono": {
+        "required": true,
+        "type": "string",
+        "pattern": "^\\+?56\\s?9?\\s?\\d{4}\\s?\\d{4}$"
+      }
+    },
+    "Recepcion": {
+      "proveedorId": {
+        "required": true,
+        "type": "uuid"
+      },
+      "sucursalId": {
+        "required": true,
+        "type": "uuid"
+      },
+      "numeroDocumento": {
+        "required": true,
+        "type": "string",
+        "maxLength": 50
+      },
+      "fechaDocumento": {
+        "required": true,
+        "type": "date",
+        "max": "today"
+      },
+      "items": {
+        "required": true,
+        "type": "array",
+        "minItems": 1
+      },
+      "total": {
+        "required": true,
+        "type": "integer",
+        "min": 0,
+        "custom": "total === sum(items.total)"
+      }
+    },
+    "Transferencia": {
+      "sucursalOrigenId": {
+        "required": true,
+        "type": "uuid"
+      },
+      "sucursalDestinoId": {
+        "required": true,
+        "type": "uuid",
+        "custom": "sucursalOrigenId !== sucursalDestinoId"
+      },
+      "items": {
+        "required": true,
+        "type": "array",
+        "minItems": 1
+      },
+      "custom": [
+        "Verificar stock disponible en sucursal origen para cada item",
+        "No se puede transferir a la misma sucursal"
+      ]
+    },
+    "Account": {
+      "codigo": {
+        "required": true,
+        "type": "string",
+        "unique": true,
+        "pattern": "^\\d{1,5}(\\.\\d{1,2})?$",
+        "maxLength": 10
+      },
+      "nombre": {
+        "required": true,
+        "type": "string",
+        "maxLength": 200
+      },
+      "tipo": {
+        "required": true,
+        "type": "enum",
+        "enum": ["activo", "pasivo", "patrimonio", "ingreso", "gasto", "costo"]
+      },
+      "nivel": {
+        "required": true,
+        "type": "integer",
+        "min": 1,
+        "max": 5
+      },
+      "padreId": {
+        "required": false,
+        "type": "uuid",
+        "custom": "Si existe padreId, nivel debe ser > nivel del padre"
+      }
+    },
+    "AsientoContable": {
+      "fecha": {
+        "required": true,
+        "type": "date"
+      },
+      "movimientos": {
+        "required": true,
+        "type": "array",
+        "minItems": 2
+      },
+      "totalDebe": {
+        "required": true,
+        "type": "integer",
+        "custom": "totalDebe === sum(movimientos.debe)"
+      },
+      "totalHaber": {
+        "required": true,
+        "type": "integer",
+        "custom": "totalHaber === sum(movimientos.haber)"
+      },
+      "custom": [
+        "totalDebe debe ser igual a totalHaber",
+        "Debe tener al menos un movimiento en debe y uno en haber"
+      ]
+    },
+    "Employee": {
+      "rut": {
+        "required": true,
+        "type": "string",
+        "unique": true,
+        "pattern": "^\\d{1,2}\\.\\d{3}\\.\\d{3}-[\\dkK]$",
+        "custom": "validarDigitoVerificador"
+      },
+      "nombre": {
+        "required": true,
+        "type": "string",
+        "maxLength": 100
+      },
+      "apellidoPaterno": {
+        "required": true,
+        "type": "string",
+        "maxLength": 100
+      },
+      "apellidoMaterno": {
+        "required": true,
+        "type": "string",
+        "maxLength": 100
+      },
+      "email": {
+        "required": true,
+        "type": "email",
+        "unique": true
+      },
+      "fechaNacimiento": {
+        "required": true,
+        "type": "date",
+        "max": "today - 18 years"
+      },
+      "fechaIngreso": {
+        "required": true,
+        "type": "date",
+        "max": "today"
+      }
+    },
+    "User": {
+      "username": {
+        "required": true,
+        "type": "string",
+        "unique": true,
+        "minLength": 3,
+        "maxLength": 50,
+        "pattern": "^[a-zA-Z0-9_]+$"
+      },
+      "email": {
+        "required": true,
+        "type": "email",
+        "unique": true
+      },
+      "nombre": {
+        "required": true,
+        "type": "string",
+        "maxLength": 100
+      },
+      "apellido": {
+        "required": true,
+        "type": "string",
+        "maxLength": 100
+      },
+      "sucursalId": {
+        "required": true,
+        "type": "uuid"
+      }
+    },
+    "Role": {
+      "nombre": {
+        "required": true,
+        "type": "string",
+        "unique": true,
+        "minLength": 3,
+        "maxLength": 50,
+        "pattern": "^[a-z0-9_]+$"
+      },
+      "descripcion": {
+        "required": true,
+        "type": "string",
+        "maxLength": 500
+      }
+    },
+    "Branch": {
+      "codigo": {
+        "required": true,
+        "type": "string",
+        "unique": true,
+        "maxLength": 20,
+        "pattern": "^[A-Z0-9-]+$"
+      },
+      "nombre": {
+        "required": true,
+        "type": "string",
+        "maxLength": 200
+      },
+      "direccion": {
+        "required": true,
+        "type": "string",
+        "maxLength": 500
+      }
+    }
+  },
+  "commonValidations": {
+    "uuid": {
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "email": {
+      "pattern": "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$"
+    },
+    "rut": {
+      "pattern": "^\\d{1,2}\\.\\d{3}\\.\\d{3}-[\\dkK]$",
+      "custom": "validarDigitoVerificador"
+    },
+    "date": {
+      "format": "YYYY-MM-DD",
+      "iso8601": true
+    },
+    "dateTime": {
+      "format": "ISO 8601",
+      "example": "2024-12-01T10:30:00Z"
+    },
+    "clp": {
+      "type": "integer",
+      "min": 0,
+      "description": "Montos en centavos CLP"
+    }
+  },
+  "customValidators": {
+    "validarDigitoVerificador": {
+      "description": "Valida el dígito verificador del RUT chileno",
+      "algorithm": "Módulo 11"
+    },
+    "validarStockDisponible": {
+      "description": "Valida que haya stock disponible para la operación",
+      "context": "Transferencias, Ventas"
+    },
+    "validarJerarquiaCuentas": {
+      "description": "Valida que la jerarquía de cuentas sea correcta",
+      "context": "Account"
+    },
+    "validarAsientoBalanceado": {
+      "description": "Valida que debe = haber en asiento contable",
+      "context": "AsientoContable"
+    }
+  }
+}
+

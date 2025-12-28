@@ -1,0 +1,3163 @@
+openapi: 3.1.0
+info:
+  title: TCG ERP API
+  version: 1.0.0
+  description: |
+    Especificación completa de la API para el sistema TCG ERP.
+    Extraída del código del frontend, mocks MSW y fixtures.
+  contact:
+    name: TCG ERP Team
+servers:
+  - url: https://api.tcg-erp.com/v1
+    description: Producción
+  - url: http://localhost:3001/api
+    description: Desarrollo local
+
+tags:
+  - name: products
+    description: Gestión de productos TCG
+  - name: inventory
+    description: Gestión de inventario y stock
+  - name: recepciones
+    description: Recepciones de productos
+  - name: transferencias
+    description: Transferencias entre sucursales
+  - name: proveedores
+    description: Gestión de proveedores
+  - name: sales
+    description: Ventas y transacciones
+  - name: orders
+    description: Órdenes de clientes
+  - name: customers
+    description: Gestión de clientes
+  - name: accounting
+    description: Contabilidad y libros contables
+  - name: rrhh
+    description: Recursos Humanos
+  - name: admin
+    description: Administración del sistema
+  - name: forecast
+    description: Proyecciones y forecast de ventas
+  - name: reports
+    description: Reportes y estadísticas
+  - name: dashboard
+    description: Dashboard y métricas
+
+security:
+  - bearerAuth: []
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token JWT de autenticación
+
+  parameters:
+    page:
+      name: page
+      in: query
+      description: Número de página (1-based)
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    pageSize:
+      name: limit
+      in: query
+      description: Tamaño de página
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 25
+    sortBy:
+      name: sortBy
+      in: query
+      description: Campo por el cual ordenar
+      schema:
+        type: string
+    sortDir:
+      name: sortOrder
+      in: query
+      description: Dirección de ordenamiento
+      schema:
+        type: string
+        enum: [asc, desc]
+        default: asc
+    search:
+      name: search
+      in: query
+      description: Búsqueda de texto
+      schema:
+        type: string
+    branchId:
+      name: sucursalId
+      in: query
+      description: ID de sucursal
+      schema:
+        type: string
+    dateFrom:
+      name: fechaDesde
+      in: query
+      description: Fecha desde (ISO 8601)
+      schema:
+        type: string
+        format: date-time
+    dateTo:
+      name: fechaHasta
+      in: query
+      description: Fecha hasta (ISO 8601)
+      schema:
+        type: string
+        format: date-time
+
+  responses:
+    Error422:
+      description: Error de validación
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Recurso no encontrado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Conflict:
+      description: "Conflicto (ej: SKU duplicado)"
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unauthorized:
+      description: No autenticado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  schemas:
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          required:
+            - code
+            - message
+          properties:
+            code:
+              type: string
+              example: "VALIDATION_ERROR"
+            message:
+              type: string
+              example: "Error de validación"
+            details:
+              type: array
+              items:
+                type: object
+                properties:
+                  field:
+                    type: string
+                  message:
+                    type: string
+        success:
+          type: boolean
+          example: false
+        timestamp:
+          type: string
+          format: date-time
+
+    PaginatedResponse:
+      type: object
+      required:
+        - data
+        - pagination
+      properties:
+        data:
+          type: array
+          items: {}
+        pagination:
+          type: object
+          required:
+            - page
+            - limit
+            - total
+            - totalPages
+          properties:
+            page:
+              type: integer
+            limit:
+              type: integer
+            total:
+              type: integer
+            totalPages:
+              type: integer
+            hasNext:
+              type: boolean
+            hasPrev:
+              type: boolean
+
+    # Enums
+    Game:
+      type: string
+      enum:
+        - pokemon
+        - yugioh
+        - magic
+        - digimon
+        - one_piece
+        - dragon_ball
+        - naruto
+        - bleach
+        - final_fantasy
+        - card_fight_vanguard
+        - weiss_schwarz
+        - battle_spirits
+        - other
+
+    Rarity:
+      type: string
+      enum:
+        - comun
+        - infrecuente
+        - rara
+        - rara_holo
+        - rara_secreta
+        - rara_ultra
+        - rara_gold
+        - rara_rainbow
+        - rara_alternate
+        - rara_full_art
+        - rara_charizard
+        - legendary
+        - mythic
+
+    Condition:
+      type: string
+      enum:
+        - mint
+        - near_mint
+        - excellent
+        - very_good
+        - good
+        - fair
+        - poor
+        - damaged
+
+    Language:
+      type: string
+      enum:
+        - espanol
+        - ingles
+        - japones
+        - chino
+        - koreano
+        - frances
+        - aleman
+        - italiano
+        - portugues
+        - ruso
+
+    ProductType:
+      type: string
+      enum:
+        - single
+        - sellado
+        - bundle
+        - collection
+
+    DocType:
+      type: string
+      enum:
+        - boleta
+        - factura
+        - nota_credito
+        - nota_debito
+        - guia_despacho
+        - recibo
+
+    # Productos
+    Product:
+      type: object
+      required:
+        - id
+        - nombre
+        - precio
+        - stock
+        - categoria
+        - activo
+      properties:
+        id:
+          type: integer
+          format: int64
+        nombre:
+          type: string
+          maxLength: 200
+        descripcion:
+          type: string
+          nullable: true
+        sku:
+          type: string
+          nullable: true
+        juego:
+          $ref: '#/components/schemas/Game'
+        set:
+          type: string
+          nullable: true
+        nro_coleccionista:
+          type: string
+          nullable: true
+        rareza:
+          $ref: '#/components/schemas/Rarity'
+        idioma:
+          $ref: '#/components/schemas/Language'
+        condicion:
+          $ref: '#/components/schemas/Condition'
+        tipo:
+          $ref: '#/components/schemas/ProductType'
+        precio:
+          type: integer
+          format: int64
+          description: Precio en CLP (centavos)
+        precio_compra:
+          type: integer
+          format: int64
+          nullable: true
+        iva:
+          type: integer
+          default: 19
+          description: Porcentaje de IVA
+        stock:
+          type: integer
+          minimum: 0
+        categoria:
+          type: string
+        imagen:
+          type: string
+          format: uri
+          nullable: true
+        imagenes:
+          type: array
+          items:
+            type: string
+            format: uri
+        stock_sucursales:
+          type: object
+          additionalProperties:
+            type: integer
+        activo:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateProductRequest:
+      type: object
+      required:
+        - nombre
+        - precio
+        - stock
+        - categoria
+      properties:
+        nombre:
+          type: string
+          maxLength: 200
+        descripcion:
+          type: string
+        precio:
+          type: integer
+          format: int64
+        stock:
+          type: integer
+          minimum: 0
+        categoria:
+          type: string
+        imagen:
+          type: string
+          format: uri
+        sku:
+          type: string
+
+    UpdateProductRequest:
+      type: object
+      properties:
+        nombre:
+          type: string
+        descripcion:
+          type: string
+        precio:
+          type: integer
+          format: int64
+        stock:
+          type: integer
+        categoria:
+          type: string
+        imagen:
+          type: string
+          format: uri
+        sku:
+          type: string
+
+paths:
+  # PRODUCTOS
+  /products:
+    get:
+      tags: [products]
+      summary: Listar productos
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/pageSize'
+        - $ref: '#/components/parameters/sortBy'
+        - $ref: '#/components/parameters/sortDir'
+        - $ref: '#/components/parameters/search'
+        - name: category
+          in: query
+          schema:
+            type: string
+        - name: juego
+          in: query
+          schema:
+            $ref: '#/components/schemas/Game'
+        - name: rareza
+          in: query
+          schema:
+            $ref: '#/components/schemas/Rarity'
+        - name: idioma
+          in: query
+          schema:
+            $ref: '#/components/schemas/Language'
+        - name: condicion
+          in: query
+          schema:
+            $ref: '#/components/schemas/Condition'
+      responses:
+        '200':
+          description: Lista de productos
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Product'
+    post:
+      tags: [products]
+      summary: Crear producto
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProductRequest'
+      responses:
+        '201':
+          description: Producto creado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '422':
+          $ref: '#/components/responses/Error422'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /products/{id}:
+    get:
+      tags: [products]
+      summary: Obtener producto por ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Producto encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [products]
+      summary: Actualizar producto
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProductRequest'
+      responses:
+        '200':
+          description: Producto actualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Error422'
+    delete:
+      tags: [products]
+      summary: Eliminar producto
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Producto eliminado
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /products/stats:
+    get:
+      tags: [products]
+      summary: Estadísticas de productos
+      responses:
+        '200':
+          description: Estadísticas
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /products/categories:
+    get:
+      tags: [products]
+      summary: Listar categorías
+      responses:
+        '200':
+          description: Lista de categorías
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+
+  /products/low-stock:
+    get:
+      tags: [products]
+      summary: Productos con stock bajo
+      responses:
+        '200':
+          description: Lista de productos
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Product'
+
+  /products/{id}/stock:
+    patch:
+      tags: [products]
+      summary: Actualizar stock de producto
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - stock
+              properties:
+                stock:
+                  type: integer
+                  minimum: 0
+      responses:
+        '200':
+          description: Stock actualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Error422'
+
+  # INVENTARIO
+  /inventory:
+    get:
+      tags: [inventory]
+      summary: Listar inventario
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/pageSize'
+        - $ref: '#/components/parameters/search'
+        - name: location
+          in: query
+          schema:
+            type: string
+        - name: lowStock
+          in: query
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Lista de inventario
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          type: object
+
+  /inventory/{id}:
+    get:
+      tags: [inventory]
+      summary: Obtener item de inventario
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Item encontrado
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [inventory]
+      summary: Actualizar item de inventario
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Item actualizado
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /inventory/stats:
+    get:
+      tags: [inventory]
+      summary: Estadísticas de inventario
+      responses:
+        '200':
+          description: Estadísticas
+
+  /inventory/alerts:
+    get:
+      tags: [inventory]
+      summary: Alertas de inventario
+      parameters:
+        - name: priority
+          in: query
+          schema:
+            type: string
+            enum: [alta, media, baja]
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [sin_stock, bajo_stock, stock_alto]
+      responses:
+        '200':
+          description: Lista de alertas
+
+  /inventory/low-stock:
+    get:
+      tags: [inventory]
+      summary: Productos con stock bajo
+      responses:
+        '200':
+          description: Lista de productos
+
+  /inventory/out-of-stock:
+    get:
+      tags: [inventory]
+      summary: Productos sin stock
+      responses:
+        '200':
+          description: Lista de productos
+
+  /inventory/{id}/stock:
+    patch:
+      tags: [inventory]
+      summary: Actualizar stock
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - stockActual
+              properties:
+                stockActual:
+                  type: integer
+                motivo:
+                  type: string
+      responses:
+        '200':
+          description: Stock actualizado
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /inventory/locations:
+    get:
+      tags: [inventory]
+      summary: Listar ubicaciones
+      responses:
+        '200':
+          description: Lista de ubicaciones
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+
+  /inventory/by-location/{location}:
+    get:
+      tags: [inventory]
+      summary: Inventario por ubicación
+      parameters:
+        - name: location
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/pageSize'
+      responses:
+        '200':
+          description: Lista de inventario
+
+  /inventory/adjustment:
+    post:
+      tags: [inventory]
+      summary: Ajuste de inventario
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - productoId
+                - cantidad
+                - motivo
+                - tipo
+              properties:
+                productoId:
+                  type: integer
+                cantidad:
+                  type: integer
+                motivo:
+                  type: string
+                tipo:
+                  type: string
+                  enum: [entrada, salida]
+      responses:
+        '201':
+          description: Ajuste realizado
+        '422':
+          $ref: '#/components/responses/Error422'
+
+  # RECEPCIONES
+  /recepciones:
+    get:
+      tags: [recepciones]
+      summary: Listar recepciones
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/pageSize'
+        - $ref: '#/components/parameters/search'
+        - name: proveedor
+          in: query
+          schema:
+            type: string
+        - name: estado
+          in: query
+          schema:
+            type: string
+        - name: sucursal
+          in: query
+          schema:
+            type: string
+        - $ref: '#/components/parameters/dateFrom'
+        - $ref: '#/components/parameters/dateTo'
+      responses:
+        '200':
+          description: Lista de recepciones
+    post:
+      tags: [recepciones]
+      summary: Crear recepción
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '201':
+          description: Recepción creada
+        '422':
+          $ref: '#/components/responses/Error422'
+
+  /recepciones/{id}:
+    get:
+      tags: [recepciones]
+      summary: Obtener recepción por ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Recepción encontrada
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [recepciones]
+      summary: Actualizar recepción
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Recepción actualizada
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [recepciones]
+      summary: Eliminar recepción
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Recepción eliminada
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # TRANSFERENCIAS
+  /transferencias:
+    get:
+      tags: [transferencias]
+      summary: Listar transferencias
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/pageSize'
+        - $ref: '#/components/parameters/search'
+        - name: sucursalOrigen
+          in: query
+          schema:
+            type: string
+        - name: sucursalDestino
+          in: query
+          schema:
+            type: string
+        - name: estado
+          in: query
+          schema:
+            type: string
+        - $ref: '#/components/parameters/dateFrom'
+        - $ref: '#/components/parameters/dateTo'
+      responses:
+        '200':
+          description: Lista de transferencias
+    post:
+      tags: [transferencias]
+      summary: Crear transferencia
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '201':
+          description: Transferencia creada
+        '422':
+          $ref: '#/components/responses/Error422'
+
+  /transferencias/{id}:
+    get:
+      tags: [transferencias]
+      summary: Obtener transferencia por ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Transferencia encontrada
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [transferencias]
+      summary: Actualizar transferencia
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Transferencia actualizada
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [transferencias]
+      summary: Eliminar transferencia
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Transferencia eliminada
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # PROVEEDORES
+  /proveedores:
+    get:
+      tags: [proveedores]
+      summary: Listar proveedores
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/pageSize'
+        - $ref: '#/components/parameters/search'
+        - name: activo
+          in: query
+          schema:
+            type: boolean
+        - name: region
+          in: query
+          schema:
+            type: string
+        - name: tipo
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Lista de proveedores
+    post:
+      tags: [proveedores]
+      summary: Crear proveedor
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '201':
+          description: Proveedor creado
+        '422':
+          $ref: '#/components/responses/Error422'
+
+  /proveedores/{id}:
+    get:
+      tags: [proveedores]
+      summary: Obtener proveedor por ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Proveedor encontrado
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [proveedores]
+      summary: Actualizar proveedor
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Proveedor actualizado
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [proveedores]
+      summary: Eliminar proveedor
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Proveedor eliminado
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # VENTAS
+  /sales:
+    get:
+      tags: [sales]
+      summary: Listar ventas
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/pageSize'
+        - $ref: '#/components/parameters/search'
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: paymentMethod
+          in: query
+          schema:
+            type: string
+        - $ref: '#/components/parameters/dateFrom'
+        - $ref: '#/components/parameters/dateTo'
+      responses:
+        '200':
+          description: Lista de ventas
+    post:
+      tags: [sales]
+      summary: Crear venta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '201':
+          description: Venta creada
+        '422':
+          $ref: '#/components/responses/Error422'
+
+  /sales/{id}:
+    get:
+      tags: [sales]
+      summary: Obtener venta por ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Venta encontrada
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [sales]
+      summary: Actualizar venta
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Venta actualizada
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [sales]
+      summary: Eliminar venta
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Venta eliminada
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /sales/stats:
+    get:
+      tags: [sales]
+      summary: Estadísticas de ventas
+      responses:
+        '200':
+          description: Estadísticas
+
+  /sales/monthly:
+    get:
+      tags: [sales]
+      summary: Ventas mensuales
+      responses:
+        '200':
+          description: Datos mensuales
+
+  /sales/{id}/status:
+    patch:
+      tags: [sales]
+      summary: Actualizar estado de venta
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - estado
+              properties:
+                estado:
+                  type: string
+                  enum: [pendiente, completada, cancelada]
+      responses:
+        '200':
+          description: Estado actualizado
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /sales/recent:
+    get:
+      tags: [sales]
+      summary: Ventas recientes
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 5
+      responses:
+        '200':
+          description: Lista de ventas recientes
+
+  /sales/top-customers:
+    get:
+      tags: [sales]
+      summary: Top clientes
+      responses:
+        '200':
+          description: Lista de top clientes
+
+  # ÓRDENES
+  /orders:
+    get:
+      tags: [orders]
+      summary: Listar órdenes
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/pageSize'
+        - $ref: '#/components/parameters/search'
+        - name: estado
+          in: query
+          schema:
+            type: string
+        - name: canal
+          in: query
+          schema:
+            type: string
+        - name: clienteId
+          in: query
+          schema:
+            type: string
+        - name: usuarioId
+          in: query
+          schema:
+            type: string
+        - $ref: '#/components/parameters/branchId'
+        - $ref: '#/components/parameters/dateFrom'
+        - $ref: '#/components/parameters/dateTo'
+        - name: montoMinimo
+          in: query
+          schema:
+            type: integer
+        - name: montoMaximo
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Lista de órdenes
+    post:
+      tags: [orders]
+      summary: Crear orden
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '201':
+          description: Orden creada
+        '422':
+          $ref: '#/components/responses/Error422'
+
+  /orders/{id}:
+    get:
+      tags: [orders]
+      summary: Obtener orden por ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Orden encontrada
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [orders]
+      summary: Actualizar orden
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Orden actualizada
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [orders]
+      summary: Eliminar orden
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Orden eliminada
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /orders/{id}/timeline:
+    get:
+      tags: [orders]
+      summary: Timeline de eventos de orden
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Lista de eventos
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # CLIENTES
+  /customers:
+    get:
+      tags: [customers]
+      summary: Listar clientes
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/pageSize'
+        - $ref: '#/components/parameters/search'
+        - name: estado
+          in: query
+          schema:
+            type: string
+        - name: canalComunicacion
+          in: query
+          schema:
+            type: string
+        - name: recibirPromociones
+          in: query
+          schema:
+            type: boolean
+        - $ref: '#/components/parameters/dateFrom'
+        - $ref: '#/components/parameters/dateTo'
+        - name: region
+          in: query
+          schema:
+            type: string
+        - name: ciudad
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Lista de clientes
+    post:
+      tags: [customers]
+      summary: Crear cliente
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '201':
+          description: Cliente creado
+        '422':
+          $ref: '#/components/responses/Error422'
+
+  /customers/{id}:
+    get:
+      tags: [customers]
+      summary: Obtener cliente por ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Cliente encontrado
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [customers]
+      summary: Actualizar cliente
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Cliente actualizado
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [customers]
+      summary: Eliminar cliente
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Cliente eliminado
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /customers/{id}/orders:
+    get:
+      tags: [customers]
+      summary: Órdenes de un cliente
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Lista de órdenes
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /customers/{id}/stats:
+    get:
+      tags: [customers]
+      summary: Estadísticas de cliente
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Estadísticas
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # CONTABILIDAD - CUENTAS
+  /accounting/accounts:
+    get:
+      tags: [accounting]
+      summary: Listar cuentas
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/pageSize'
+        - $ref: '#/components/parameters/search'
+        - name: tipo
+          in: query
+          schema:
+            type: string
+        - name: nivel
+          in: query
+          schema:
+            type: integer
+        - name: padreId
+          in: query
+          schema:
+            type: string
+        - name: activa
+          in: query
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Lista de cuentas
+    post:
+      tags: [accounting]
+      summary: Crear cuenta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '201':
+          description: Cuenta creada
+        '422':
+          $ref: '#/components/responses/Error422'
+
+  /accounting/accounts/tree:
+    get:
+      tags: [accounting]
+      summary: Árbol de cuentas
+      responses:
+        '200':
+          description: Árbol jerárquico de cuentas
+
+  /accounting/accounts/{id}:
+    get:
+      tags: [accounting]
+      summary: Obtener cuenta por ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Cuenta encontrada
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [accounting]
+      summary: Actualizar cuenta
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Cuenta actualizada
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [accounting]
+      summary: Eliminar cuenta
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Cuenta eliminada
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /accounting/accounts/{id}/children:
+    get:
+      tags: [accounting]
+      summary: Obtener hijos de cuenta
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Lista de cuentas hijas
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # CONTABILIDAD - ASIENTOS
+  /accounting/entries:
+    get:
+      tags: [accounting]
+      summary: Listar asientos
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/pageSize'
+        - $ref: '#/components/parameters/search'
+        - $ref: '#/components/parameters/dateFrom'
+        - $ref: '#/components/parameters/dateTo'
+        - name: tipo
+          in: query
+          schema:
+            type: string
+        - name: estado
+          in: query
+          schema:
+            type: string
+        - name: comprobante
+          in: query
+          schema:
+            type: string
+        - name: usuarioCreacion
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Lista de asientos
+    post:
+      tags: [accounting]
+      summary: Crear asiento
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '201':
+          description: Asiento creado
+        '422':
+          $ref: '#/components/responses/Error422'
+
+  /accounting/entries/{id}:
+    get:
+      tags: [accounting]
+      summary: Obtener asiento por ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Asiento encontrado
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [accounting]
+      summary: Actualizar asiento
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Asiento actualizado
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [accounting]
+      summary: Eliminar asiento
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Asiento eliminado
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /accounting/entries/{id}/approve:
+    post:
+      tags: [accounting]
+      summary: Aprobar asiento
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Asiento aprobado
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Error422'
+
+  /accounting/entries/{id}/contabilize:
+    post:
+      tags: [accounting]
+      summary: Contabilizar asiento
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Asiento contabilizado
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Error422'
+
+  /accounting/entries/{id}/cancel:
+    post:
+      tags: [accounting]
+      summary: Cancelar asiento
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Asiento cancelado
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Error422'
+
+  # CONTABILIDAD - LIBRO MAYOR
+  /accounting/ledger:
+    get:
+      tags: [accounting]
+      summary: Libro mayor
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/pageSize'
+        - $ref: '#/components/parameters/search'
+        - name: cuentaId
+          in: query
+          schema:
+            type: string
+        - $ref: '#/components/parameters/dateFrom'
+        - $ref: '#/components/parameters/dateTo'
+      responses:
+        '200':
+          description: Libro mayor
+
+  /accounting/ledger/account/{id}:
+    get:
+      tags: [accounting]
+      summary: Libro mayor por cuenta
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/dateFrom'
+        - $ref: '#/components/parameters/dateTo'
+      responses:
+        '200':
+          description: Libro mayor de la cuenta
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /accounting/ledger/export:
+    get:
+      tags: [accounting]
+      summary: Exportar libro mayor
+      parameters:
+        - name: cuentaId
+          in: query
+          schema:
+            type: string
+        - $ref: '#/components/parameters/dateFrom'
+        - $ref: '#/components/parameters/dateTo'
+      responses:
+        '200':
+          description: Archivo exportado
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+
+  # CONTABILIDAD - LIBRO IVA
+  /accounting/tax-books:
+    get:
+      tags: [accounting]
+      summary: Libro IVA
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/pageSize'
+        - $ref: '#/components/parameters/search'
+        - name: tipo
+          in: query
+          schema:
+            type: string
+            enum: [compras, ventas]
+        - name: periodo
+          in: query
+          schema:
+            type: string
+        - $ref: '#/components/parameters/dateFrom'
+        - $ref: '#/components/parameters/dateTo'
+        - name: rut
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Libro IVA
+
+  /accounting/tax-books/period/{periodo}:
+    get:
+      tags: [accounting]
+      summary: Libro IVA por período
+      parameters:
+        - name: periodo
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: tipo
+          in: query
+          schema:
+            type: string
+            enum: [compras, ventas]
+      responses:
+        '200':
+          description: Libro IVA del período
+
+  /accounting/tax-books/stats:
+    get:
+      tags: [accounting]
+      summary: Estadísticas de libro IVA
+      parameters:
+        - name: periodo
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Estadísticas
+
+  /accounting/tax-books/export:
+    get:
+      tags: [accounting]
+      summary: Exportar libro IVA
+      parameters:
+        - name: tipo
+          in: query
+          schema:
+            type: string
+            enum: [compras, ventas]
+        - name: periodo
+          in: query
+          schema:
+            type: string
+        - $ref: '#/components/parameters/dateFrom'
+        - $ref: '#/components/parameters/dateTo'
+      responses:
+        '200':
+          description: Archivo exportado
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+
+  /accounting/stats/general:
+    get:
+      tags: [accounting]
+      summary: Estadísticas generales de contabilidad
+      responses:
+        '200':
+          description: Estadísticas
+
+  /accounting/stats/period/{periodo}:
+    get:
+      tags: [accounting]
+      summary: Estadísticas por período
+      parameters:
+        - name: periodo
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Estadísticas del período
+
+  # RRHH - EMPLEADOS
+  /hr/employees:
+    get:
+      tags: [rrhh]
+      summary: Listar empleados
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/pageSize'
+        - $ref: '#/components/parameters/search'
+        - name: estado
+          in: query
+          schema:
+            type: string
+        - name: cargo
+          in: query
+          schema:
+            type: string
+        - name: departamento
+          in: query
+          schema:
+            type: string
+        - name: fechaIngresoDesde
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: fechaIngresoHasta
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Lista de empleados
+    post:
+      tags: [rrhh]
+      summary: Crear empleado
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '201':
+          description: Empleado creado
+        '422':
+          $ref: '#/components/responses/Error422'
+
+  /hr/employees/{id}:
+    get:
+      tags: [rrhh]
+      summary: Obtener empleado por ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Empleado encontrado
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [rrhh]
+      summary: Actualizar empleado
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Empleado actualizado
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [rrhh]
+      summary: Eliminar empleado
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Empleado eliminado
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /hr/employees/estadisticas:
+    get:
+      tags: [rrhh]
+      summary: Estadísticas de empleados
+      responses:
+        '200':
+          description: Estadísticas
+
+  # RRHH - CONTRATOS
+  /hr/contracts:
+    get:
+      tags: [rrhh]
+      summary: Listar contratos
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/pageSize'
+        - $ref: '#/components/parameters/search'
+        - name: empleadoId
+          in: query
+          schema:
+            type: string
+        - name: tipo
+          in: query
+          schema:
+            type: string
+        - name: estado
+          in: query
+          schema:
+            type: string
+        - name: fechaInicioDesde
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: fechaInicioHasta
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Lista de contratos
+    post:
+      tags: [rrhh]
+      summary: Crear contrato
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '201':
+          description: Contrato creado
+        '422':
+          $ref: '#/components/responses/Error422'
+
+  /hr/contracts/{id}:
+    get:
+      tags: [rrhh]
+      summary: Obtener contrato por ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Contrato encontrado
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [rrhh]
+      summary: Actualizar contrato
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Contrato actualizado
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /hr/contracts/empleado/{empleadoId}:
+    get:
+      tags: [rrhh]
+      summary: Contratos de un empleado
+      parameters:
+        - name: empleadoId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Lista de contratos
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /hr/contracts/{id}/terminar:
+    put:
+      tags: [rrhh]
+      summary: Terminar contrato
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - fechaTermino
+              properties:
+                fechaTermino:
+                  type: string
+                  format: date
+                observaciones:
+                  type: string
+      responses:
+        '200':
+          description: Contrato terminado
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Error422'
+
+  # RRHH - NÓMINA
+  /hr/payroll:
+    get:
+      tags: [rrhh]
+      summary: Listar nóminas
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/pageSize'
+        - $ref: '#/components/parameters/search'
+        - name: periodo
+          in: query
+          schema:
+            type: string
+        - name: empleadoId
+          in: query
+          schema:
+            type: string
+        - name: estado
+          in: query
+          schema:
+            type: string
+        - name: fechaPagoDesde
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: fechaPagoHasta
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Lista de nóminas
+    post:
+      tags: [rrhh]
+      summary: Generar nóminas
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '201':
+          description: Nóminas generadas
+        '422':
+          $ref: '#/components/responses/Error422'
+
+  /hr/payroll/{id}:
+    get:
+      tags: [rrhh]
+      summary: Obtener nómina por ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Nómina encontrada
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /hr/payroll/periodo/{periodo}:
+    get:
+      tags: [rrhh]
+      summary: Nóminas por período
+      parameters:
+        - name: periodo
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Lista de nóminas
+
+  /hr/payroll/generar:
+    post:
+      tags: [rrhh]
+      summary: Generar nóminas para período
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - periodo
+              properties:
+                periodo:
+                  type: string
+                empleadoIds:
+                  type: array
+                  items:
+                    type: string
+                incluirTodos:
+                  type: boolean
+      responses:
+        '201':
+          description: Nóminas generadas
+        '422':
+          $ref: '#/components/responses/Error422'
+
+  /hr/payroll/procesar:
+    put:
+      tags: [rrhh]
+      summary: Procesar nómina (marcar como pagada)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - nominaId
+                - fechaPago
+              properties:
+                nominaId:
+                  type: string
+                fechaPago:
+                  type: string
+                  format: date
+                observaciones:
+                  type: string
+      responses:
+        '200':
+          description: Nómina procesada
+        '422':
+          $ref: '#/components/responses/Error422'
+
+  /hr/payroll/calcular:
+    post:
+      tags: [rrhh]
+      summary: Calcular nómina para empleado
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - empleadoId
+                - periodo
+              properties:
+                empleadoId:
+                  type: string
+                periodo:
+                  type: string
+      responses:
+        '200':
+          description: Cálculo de nómina
+        '422':
+          $ref: '#/components/responses/Error422'
+
+  /hr/payroll/resumen/{periodo}:
+    get:
+      tags: [rrhh]
+      summary: Resumen de nómina por período
+      parameters:
+        - name: periodo
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Resumen de nómina
+
+  /hr/payroll/exportar:
+    post:
+      tags: [rrhh]
+      summary: Exportar nómina
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Archivo exportado
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+
+  # RRHH - IMPOSICIONES
+  /hr/contributions:
+    get:
+      tags: [rrhh]
+      summary: Listar imposiciones
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/pageSize'
+        - $ref: '#/components/parameters/search'
+        - name: periodo
+          in: query
+          schema:
+            type: string
+        - name: empleadoId
+          in: query
+          schema:
+            type: string
+        - name: tipo
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Lista de imposiciones
+    post:
+      tags: [rrhh]
+      summary: Generar imposiciones
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - periodo
+              properties:
+                periodo:
+                  type: string
+                empleadoIds:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '201':
+          description: Imposiciones generadas
+        '422':
+          $ref: '#/components/responses/Error422'
+
+  /hr/contributions/{id}:
+    get:
+      tags: [rrhh]
+      summary: Obtener imposiciones por ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Imposiciones encontradas
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /hr/contributions/periodo/{periodo}:
+    get:
+      tags: [rrhh]
+      summary: Imposiciones por período
+      parameters:
+        - name: periodo
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Lista de imposiciones
+
+  /hr/contributions/generar:
+    post:
+      tags: [rrhh]
+      summary: Generar imposiciones para período
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - periodo
+              properties:
+                periodo:
+                  type: string
+                empleadoIds:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '201':
+          description: Imposiciones generadas
+        '422':
+          $ref: '#/components/responses/Error422'
+
+  /hr/contributions/exportar:
+    post:
+      tags: [rrhh]
+      summary: Exportar imposiciones
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Archivo exportado
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+
+  # RRHH - CARGOS
+  /hr/positions:
+    get:
+      tags: [rrhh]
+      summary: Listar cargos
+      responses:
+        '200':
+          description: Lista de cargos
+
+  /hr/positions/{id}:
+    get:
+      tags: [rrhh]
+      summary: Obtener cargo por ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Cargo encontrado
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # RRHH - PARÁMETROS
+  /hr/parametros/calculo:
+    get:
+      tags: [rrhh]
+      summary: Obtener parámetros de cálculo
+      responses:
+        '200':
+          description: Parámetros
+    put:
+      tags: [rrhh]
+      summary: Actualizar parámetros de cálculo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Parámetros actualizados
+        '422':
+          $ref: '#/components/responses/Error422'
+
+  # ADMIN - USUARIOS
+  /admin/users:
+    get:
+      tags: [admin]
+      summary: Listar usuarios
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/pageSize'
+        - $ref: '#/components/parameters/search'
+        - name: estado
+          in: query
+          schema:
+            type: boolean
+        - name: rolId
+          in: query
+          schema:
+            type: string
+        - $ref: '#/components/parameters/branchId'
+        - name: fechaInicio
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: fechaFin
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Lista de usuarios
+    post:
+      tags: [admin]
+      summary: Crear usuario
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '201':
+          description: Usuario creado
+        '422':
+          $ref: '#/components/responses/Error422'
+
+  /admin/users/{id}:
+    get:
+      tags: [admin]
+      summary: Obtener usuario por ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Usuario encontrado
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [admin]
+      summary: Actualizar usuario
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Usuario actualizado
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [admin]
+      summary: Eliminar usuario
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Usuario eliminado
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ADMIN - ROLES
+  /admin/roles:
+    get:
+      tags: [admin]
+      summary: Listar roles
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/pageSize'
+        - $ref: '#/components/parameters/search'
+        - name: estado
+          in: query
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Lista de roles
+    post:
+      tags: [admin]
+      summary: Crear rol
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '201':
+          description: Rol creado
+        '422':
+          $ref: '#/components/responses/Error422'
+
+  /admin/roles/{id}:
+    get:
+      tags: [admin]
+      summary: Obtener rol por ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Rol encontrado
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [admin]
+      summary: Actualizar rol
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Rol actualizado
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [admin]
+      summary: Eliminar rol
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Rol eliminado
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/roles/{id}/permissions:
+    put:
+      tags: [admin]
+      summary: Actualizar permisos de rol
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - permissionIds
+              properties:
+                permissionIds:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '200':
+          description: Permisos actualizados
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ADMIN - PERMISOS
+  /admin/permissions:
+    get:
+      tags: [admin]
+      summary: Listar permisos
+      responses:
+        '200':
+          description: Lista de permisos
+
+  # ADMIN - SUCURSALES
+  /admin/branches:
+    get:
+      tags: [admin]
+      summary: Listar sucursales
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/pageSize'
+        - $ref: '#/components/parameters/search'
+        - name: estado
+          in: query
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Lista de sucursales
+    post:
+      tags: [admin]
+      summary: Crear sucursal
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '201':
+          description: Sucursal creada
+        '422':
+          $ref: '#/components/responses/Error422'
+
+  /admin/branches/{id}:
+    get:
+      tags: [admin]
+      summary: Obtener sucursal por ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Sucursal encontrada
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [admin]
+      summary: Actualizar sucursal
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Sucursal actualizada
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [admin]
+      summary: Eliminar sucursal
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Sucursal eliminada
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ADMIN - CONFIGURACIONES
+  /admin/settings:
+    get:
+      tags: [admin]
+      summary: Listar configuraciones
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/pageSize'
+        - $ref: '#/components/parameters/search'
+        - name: categoria
+          in: query
+          schema:
+            type: string
+        - name: editable
+          in: query
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Lista de configuraciones
+
+  /admin/settings/{id}:
+    get:
+      tags: [admin]
+      summary: Obtener configuración por ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Configuración encontrada
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [admin]
+      summary: Actualizar configuración
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Configuración actualizada
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/stats:
+    get:
+      tags: [admin]
+      summary: Estadísticas de administración
+      responses:
+        '200':
+          description: Estadísticas
+
+  # FORECAST
+  /forecast/calculate:
+    post:
+      tags: [forecast]
+      summary: Calcular forecast
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Resultado del forecast
+        '422':
+          $ref: '#/components/responses/Error422'
+
+  /forecast/kpis:
+    get:
+      tags: [forecast]
+      summary: KPIs de forecast
+      responses:
+        '200':
+          description: KPIs
+
+  /forecast/productos-top:
+    post:
+      tags: [forecast]
+      summary: Productos top proyectados
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Lista de productos top
+
+  /forecast/sets-top:
+    post:
+      tags: [forecast]
+      summary: Sets top proyectados
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Lista de sets top
+
+  /forecast/grafico:
+    post:
+      tags: [forecast]
+      summary: Datos para gráficos
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Datos de gráfico
+
+  /forecast/comparar-metodos:
+    post:
+      tags: [forecast]
+      summary: Comparar métodos de forecast
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Comparación de métodos
+
+  /forecast/alertas:
+    get:
+      tags: [forecast]
+      summary: Alertas de forecast
+      responses:
+        '200':
+          description: Lista de alertas
+
+  /forecast/estado:
+    get:
+      tags: [forecast]
+      summary: Estado del forecast
+      responses:
+        '200':
+          description: Estado
+
+  /forecast/configuracion:
+    get:
+      tags: [forecast]
+      summary: Listar configuraciones guardadas
+      responses:
+        '200':
+          description: Lista de configuraciones
+    post:
+      tags: [forecast]
+      summary: Guardar configuración
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '201':
+          description: Configuración guardada
+
+  /forecast/configuracion/{id}:
+    put:
+      tags: [forecast]
+      summary: Actualizar configuración
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Configuración actualizada
+    delete:
+      tags: [forecast]
+      summary: Eliminar configuración
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Configuración eliminada
+
+  /forecast/historial:
+    get:
+      tags: [forecast]
+      summary: Historial de forecasts
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/pageSize'
+      responses:
+        '200':
+          description: Historial
+
+  /forecast/exportar:
+    post:
+      tags: [forecast]
+      summary: Exportar resultados
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Archivo exportado
+
+  /forecast/datos-historicos:
+    get:
+      tags: [forecast]
+      summary: Datos históricos
+      parameters:
+        - name: granularidad
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Datos históricos
+
+  /forecast/validar-configuracion:
+    post:
+      tags: [forecast]
+      summary: Validar configuración
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Resultado de validación
+
+  /forecast/recomendaciones:
+    get:
+      tags: [forecast]
+      summary: Recomendaciones de configuración
+      responses:
+        '200':
+          description: Lista de recomendaciones
+
+  /forecast/metricas:
+    post:
+      tags: [forecast]
+      summary: Calcular métricas
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Métricas calculadas
+
+  # REPORTES
+  /reports:
+    get:
+      tags: [reports]
+      summary: Listar reportes
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/pageSize'
+        - name: tipo
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Lista de reportes
+    post:
+      tags: [reports]
+      summary: Generar reporte
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '201':
+          description: Reporte generado
+
+  /reports/{id}:
+    get:
+      tags: [reports]
+      summary: Obtener reporte por ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Reporte encontrado
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [reports]
+      summary: Eliminar reporte
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Reporte eliminado
+
+  /reports/types:
+    get:
+      tags: [reports]
+      summary: Tipos de reportes disponibles
+      responses:
+        '200':
+          description: Lista de tipos
+
+  /reports/stats:
+    get:
+      tags: [reports]
+      summary: Estadísticas de reportes
+      responses:
+        '200':
+          description: Estadísticas
+
+  /reports/recent:
+    get:
+      tags: [reports]
+      summary: Reportes recientes
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 5
+      responses:
+        '200':
+          description: Lista de reportes recientes
+
+  /reports/export/{id}:
+    get:
+      tags: [reports]
+      summary: Exportar reporte
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: formato
+          in: query
+          schema:
+            type: string
+            enum: [json, csv, pdf]
+      responses:
+        '200':
+          description: Archivo exportado
+
+  # DASHBOARD
+  /dashboard/stats:
+    get:
+      tags: [dashboard]
+      summary: Estadísticas del dashboard
+      responses:
+        '200':
+          description: Estadísticas
+
+  /dashboard/charts:
+    get:
+      tags: [dashboard]
+      summary: Datos para gráficos
+      parameters:
+        - name: type
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Datos de gráficos
+
+  /charts/monthly-sales:
+    get:
+      tags: [dashboard]
+      summary: Ventas mensuales
+      responses:
+        '200':
+          description: Datos de ventas mensuales
+
+  /charts/categories:
+    get:
+      tags: [dashboard]
+      summary: Datos de categorías
+      responses:
+        '200':
+          description: Datos de categorías
+
+  /charts/stock:
+    get:
+      tags: [dashboard]
+      summary: Datos de stock
+      responses:
+        '200':
+          description: Datos de stock
+
+  /charts/trends:
+    get:
+      tags: [dashboard]
+      summary: Datos de tendencias
+      responses:
+        '200':
+          description: Datos de tendencias

@@ -1,0 +1,203 @@
+{
+  "description": "Datos de ejemplo consolidados a partir de fixtures del frontend",
+  "products": [
+    {
+      "id": 1,
+      "nombre": "Charizard VMAX",
+      "descripcion": "Pokémon TCG - Charizard VMAX Secret Rare",
+      "sku": "SWSH12PT5-025-MINT-ES",
+      "juego": "pokemon",
+      "set": "Sword & Shield - Brilliant Stars",
+      "nro_coleccionista": "025",
+      "rareza": "rara_secreta",
+      "idioma": "espanol",
+      "condicion": "mint",
+      "tipo": "single",
+      "precio": 8999,
+      "precio_compra": 4500,
+      "iva": 19,
+      "stock": 15,
+      "categoria": "Pokemon",
+      "imagen": "https://images.pokemontcg.io/swsh12pt5/025_hires.png",
+      "activo": true
+    },
+    {
+      "id": 2,
+      "nombre": "Black Lotus",
+      "descripcion": "Magic: The Gathering - Black Lotus (Alpha)",
+      "sku": "ALPHA-001-MINT-EN",
+      "juego": "magic",
+      "set": "Alpha",
+      "nro_coleccionista": "001",
+      "rareza": "legendary",
+      "idioma": "ingles",
+      "condicion": "mint",
+      "tipo": "single",
+      "precio": 1500000,
+      "precio_compra": 1200000,
+      "iva": 19,
+      "stock": 1,
+      "categoria": "Magic",
+      "activo": true
+    }
+  ],
+  "customers": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440001",
+      "nombre": "Juan",
+      "apellido": "Pérez",
+      "email": "juan.perez@email.com",
+      "telefono": "+56 9 1234 5678",
+      "rut": "12.345.678-9",
+      "estado": "activo",
+      "fechaRegistro": "2023-01-15T00:00:00Z"
+    },
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440002",
+      "nombre": "María",
+      "apellido": "González",
+      "email": "maria.gonzalez@email.com",
+      "telefono": "+56 9 8765 4321",
+      "rut": "98.765.432-1",
+      "estado": "activo",
+      "fechaRegistro": "2023-02-20T00:00:00Z"
+    }
+  ],
+  "orders": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440010",
+      "numero": "ORD-2024-001",
+      "clienteId": "550e8400-e29b-41d4-a716-446655440001",
+      "estado": "completada",
+      "canal": "tienda_fisica",
+      "tipoDocumento": "boleta",
+      "total": 8999,
+      "fechaCreacion": "2024-01-10T10:30:00Z"
+    }
+  ],
+  "recepciones": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440020",
+      "numero": "REC-2024-001",
+      "proveedorId": "550e8400-e29b-41d4-a716-446655440030",
+      "sucursalId": "550e8400-e29b-41d4-a716-446655440040",
+      "fechaRecepcion": "2024-12-01T00:00:00Z",
+      "fechaDocumento": "2024-11-30",
+      "numeroDocumento": "FAC-001234",
+      "tipoDocumento": "FACTURA",
+      "estado": "COMPLETADA",
+      "total": 125000
+    }
+  ],
+  "proveedores": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440030",
+      "nombre": "Distribuidora TCG Chile",
+      "rut": "76.123.456-7",
+      "email": "contacto@distribuidoratcg.cl",
+      "telefono": "+56 2 2345 6789",
+      "direccion": "Av. Providencia 123, Santiago",
+      "activo": true
+    }
+  ],
+  "employees": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440050",
+      "rut": "12.345.678-9",
+      "nombre": "Carlos",
+      "apellidoPaterno": "Rodríguez",
+      "apellidoMaterno": "López",
+      "email": "carlos.rodriguez@tcg-erp.com",
+      "fechaNacimiento": "1990-05-15",
+      "fechaIngreso": "2023-01-15",
+      "estado": "activo"
+    }
+  ],
+  "accounts": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440060",
+      "codigo": "111",
+      "nombre": "CAJA",
+      "tipo": "activo",
+      "nivel": 3,
+      "activa": true,
+      "saldoActual": 750000
+    },
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440061",
+      "codigo": "112",
+      "nombre": "BANCOS",
+      "tipo": "activo",
+      "nivel": 3,
+      "activa": true,
+      "saldoActual": 3500000
+    },
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440062",
+      "codigo": "211",
+      "nombre": "PROVEEDORES",
+      "tipo": "pasivo",
+      "nivel": 3,
+      "activa": true,
+      "saldoActual": 1800000
+    }
+  ],
+  "branches": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440040",
+      "codigo": "SUC-001",
+      "nombre": "Sucursal Centro",
+      "direccion": "Av. Libertador Bernardo O'Higgins 1234, Santiago",
+      "telefono": "+56 2 2345 6789",
+      "activa": true
+    },
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440041",
+      "codigo": "SUC-002",
+      "nombre": "Sucursal Norte",
+      "direccion": "Av. Apoquindo 4500, Las Condes",
+      "telefono": "+56 2 2345 6790",
+      "activa": true
+    }
+  ],
+  "users": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440070",
+      "username": "admin",
+      "email": "admin@tcg-erp.com",
+      "nombre": "Administrador",
+      "apellido": "Sistema",
+      "activo": true,
+      "sucursalId": "550e8400-e29b-41d4-a716-446655440040",
+      "roles": ["Admin"]
+    }
+  ],
+  "roles": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440080",
+      "nombre": "Admin",
+      "descripcion": "Administrador del sistema",
+      "activo": true
+    },
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440081",
+      "nombre": "Cajero",
+      "descripcion": "Cajero con acceso a ventas",
+      "activo": true
+    },
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440082",
+      "nombre": "Bodeguero",
+      "descripcion": "Bodeguero con acceso a inventario",
+      "activo": true
+    }
+  ],
+  "notes": {
+    "precios": "Los precios están en centavos CLP (ej: 8999 = $89.99 CLP)",
+    "ids": "Los IDs son UUIDs v4 excepto productos que usan integer (legacy)",
+    "fechas": "Todas las fechas están en formato ISO 8601 UTC",
+    "relaciones": "Los IDs de relaciones deben existir en sus respectivos recursos",
+    "stock": "El stock se distribuye entre sucursales según stock_sucursales"
+  }
+}
+

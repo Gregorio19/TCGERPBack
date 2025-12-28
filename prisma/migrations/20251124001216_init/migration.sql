@@ -1,0 +1,707 @@
+-- CreateEnum
+CREATE TYPE "Game" AS ENUM ('pokemon', 'yugioh', 'magic', 'digimon', 'one_piece', 'dragon_ball', 'naruto', 'bleach', 'final_fantasy', 'card_fight_vanguard', 'weiss_schwarz', 'battle_spirits', 'other');
+
+-- CreateEnum
+CREATE TYPE "Rarity" AS ENUM ('comun', 'infrecuente', 'rara', 'rara_holo', 'rara_secreta', 'rara_ultra', 'rara_gold', 'rara_rainbow', 'rara_alternate', 'rara_full_art', 'rara_charizard', 'legendary', 'mythic');
+
+-- CreateEnum
+CREATE TYPE "Condition" AS ENUM ('mint', 'near_mint', 'excellent', 'very_good', 'good', 'fair', 'poor', 'damaged');
+
+-- CreateEnum
+CREATE TYPE "Language" AS ENUM ('espanol', 'ingles', 'japones', 'chino', 'koreano', 'frances', 'aleman', 'italiano', 'portugues', 'ruso');
+
+-- CreateEnum
+CREATE TYPE "ProductType" AS ENUM ('single', 'sellado', 'bundle', 'collection');
+
+-- CreateEnum
+CREATE TYPE "OrderStatus" AS ENUM ('pendiente', 'confirmada', 'en_proceso', 'enviada', 'entregada', 'completada', 'cancelada', 'reembolsada', 'devuelta');
+
+-- CreateEnum
+CREATE TYPE "OrderChannel" AS ENUM ('tienda_fisica', 'online', 'telefono', 'whatsapp', 'redes_sociales', 'marketplace', 'mayorista', 'evento', 'other');
+
+-- CreateEnum
+CREATE TYPE "DocType" AS ENUM ('boleta', 'factura', 'nota_credito', 'nota_debito', 'guia_despacho', 'recibo');
+
+-- CreateEnum
+CREATE TYPE "CustomerStatus" AS ENUM ('activo', 'inactivo', 'suspendido');
+
+-- CreateEnum
+CREATE TYPE "ReceptionStatus" AS ENUM ('PENDIENTE', 'EN_PROCESO', 'COMPLETADA', 'CANCELADA');
+
+-- CreateEnum
+CREATE TYPE "TransferStatus" AS ENUM ('PENDIENTE', 'EN_TRANSITO', 'COMPLETADA', 'CANCELADA');
+
+-- CreateEnum
+CREATE TYPE "AccountType" AS ENUM ('activo', 'pasivo', 'patrimonio', 'ingreso', 'gasto', 'costo');
+
+-- CreateEnum
+CREATE TYPE "EntryType" AS ENUM ('manual', 'automatico', 'ajuste', 'cierre');
+
+-- CreateEnum
+CREATE TYPE "EntryStatus" AS ENUM ('borrador', 'aprobado', 'contabilizado', 'anulado');
+
+-- CreateEnum
+CREATE TYPE "EmployeeStatus" AS ENUM ('activo', 'inactivo', 'suspendido', 'licencia');
+
+-- CreateTable
+CREATE TABLE "products" (
+    "id" SERIAL NOT NULL,
+    "nombre" VARCHAR(200) NOT NULL,
+    "descripcion" VARCHAR(1000),
+    "sku" VARCHAR(50),
+    "juego" "Game",
+    "set" TEXT,
+    "nro_coleccionista" VARCHAR(50),
+    "rareza" "Rarity",
+    "idioma" "Language",
+    "condicion" "Condition",
+    "tipo" "ProductType",
+    "precio" INTEGER NOT NULL,
+    "precio_compra" INTEGER,
+    "iva" INTEGER NOT NULL DEFAULT 19,
+    "stock" INTEGER NOT NULL DEFAULT 0,
+    "categoria" TEXT NOT NULL,
+    "imagen" TEXT,
+    "imagenes" TEXT[] DEFAULT ARRAY[]::TEXT[],
+    "activo" BOOLEAN NOT NULL DEFAULT true,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+    "deleted_at" TIMESTAMP(3),
+
+    CONSTRAINT "products_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "stock_by_branch" (
+    "id" TEXT NOT NULL,
+    "product_id" INTEGER NOT NULL,
+    "branch_id" TEXT NOT NULL,
+    "cantidad" INTEGER NOT NULL DEFAULT 0,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "stock_by_branch_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "branches" (
+    "id" TEXT NOT NULL,
+    "codigo" VARCHAR(20) NOT NULL,
+    "nombre" VARCHAR(200) NOT NULL,
+    "direccion" VARCHAR(500) NOT NULL,
+    "telefono" VARCHAR(50),
+    "activa" BOOLEAN NOT NULL DEFAULT true,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+    "deleted_at" TIMESTAMP(3),
+
+    CONSTRAINT "branches_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "customers" (
+    "id" TEXT NOT NULL,
+    "nombre" VARCHAR(100) NOT NULL,
+    "apellido" VARCHAR(100) NOT NULL,
+    "email" VARCHAR(255) NOT NULL,
+    "telefono" VARCHAR(50) NOT NULL,
+    "rut" VARCHAR(20) NOT NULL,
+    "direccion" JSONB NOT NULL,
+    "estado" "CustomerStatus" NOT NULL DEFAULT 'activo',
+    "fecha_registro" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+    "deleted_at" TIMESTAMP(3),
+
+    CONSTRAINT "customers_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "orders" (
+    "id" TEXT NOT NULL,
+    "numero" VARCHAR(50) NOT NULL,
+    "cliente_id" TEXT NOT NULL,
+    "estado" "OrderStatus" NOT NULL DEFAULT 'pendiente',
+    "canal" "OrderChannel" NOT NULL,
+    "tipo_documento" "DocType" NOT NULL,
+    "subtotal" INTEGER NOT NULL,
+    "descuento_general" INTEGER NOT NULL DEFAULT 0,
+    "subtotal_con_descuento" INTEGER NOT NULL,
+    "monto_iva" INTEGER NOT NULL,
+    "costo_envio" INTEGER NOT NULL DEFAULT 0,
+    "total" INTEGER NOT NULL,
+    "sucursal_id" TEXT NOT NULL,
+    "fecha_creacion" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "fecha_actualizacion" TIMESTAMP(3) NOT NULL,
+    "deleted_at" TIMESTAMP(3),
+
+    CONSTRAINT "orders_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "order_items" (
+    "id" TEXT NOT NULL,
+    "order_id" TEXT NOT NULL,
+    "product_id" INTEGER NOT NULL,
+    "cantidad" INTEGER NOT NULL,
+    "precio_unitario" INTEGER NOT NULL,
+    "descuento" INTEGER NOT NULL DEFAULT 0,
+    "subtotal" INTEGER NOT NULL,
+    "total" INTEGER NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "order_items_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "suppliers" (
+    "id" TEXT NOT NULL,
+    "nombre" VARCHAR(200) NOT NULL,
+    "rut" VARCHAR(20) NOT NULL,
+    "email" VARCHAR(255),
+    "telefono" VARCHAR(50),
+    "direccion" VARCHAR(500),
+    "activo" BOOLEAN NOT NULL DEFAULT true,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+    "deleted_at" TIMESTAMP(3),
+
+    CONSTRAINT "suppliers_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "receptions" (
+    "id" TEXT NOT NULL,
+    "numero" VARCHAR(50) NOT NULL,
+    "proveedor_id" TEXT NOT NULL,
+    "sucursal_id" TEXT NOT NULL,
+    "fecha_recepcion" TIMESTAMP(3) NOT NULL,
+    "fecha_documento" TIMESTAMP(3) NOT NULL,
+    "numero_documento" VARCHAR(50) NOT NULL,
+    "tipo_documento" TEXT NOT NULL,
+    "estado" "ReceptionStatus" NOT NULL DEFAULT 'PENDIENTE',
+    "total" INTEGER NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+    "deleted_at" TIMESTAMP(3),
+
+    CONSTRAINT "receptions_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "reception_items" (
+    "id" TEXT NOT NULL,
+    "reception_id" TEXT NOT NULL,
+    "product_id" INTEGER NOT NULL,
+    "cantidad" INTEGER NOT NULL,
+    "precio_unitario" INTEGER NOT NULL,
+    "subtotal" INTEGER NOT NULL,
+    "total" INTEGER NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "reception_items_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "transfers" (
+    "id" TEXT NOT NULL,
+    "numero" VARCHAR(50) NOT NULL,
+    "sucursal_origen_id" TEXT NOT NULL,
+    "sucursal_destino_id" TEXT NOT NULL,
+    "fecha_transferencia" TIMESTAMP(3) NOT NULL,
+    "estado" "TransferStatus" NOT NULL DEFAULT 'PENDIENTE',
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+    "deleted_at" TIMESTAMP(3),
+
+    CONSTRAINT "transfers_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "transfer_items" (
+    "id" TEXT NOT NULL,
+    "transfer_id" TEXT NOT NULL,
+    "product_id" INTEGER NOT NULL,
+    "cantidad" INTEGER NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "transfer_items_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "accounts" (
+    "id" TEXT NOT NULL,
+    "codigo" VARCHAR(10) NOT NULL,
+    "nombre" VARCHAR(200) NOT NULL,
+    "tipo" "AccountType" NOT NULL,
+    "nivel" INTEGER NOT NULL,
+    "padre_id" TEXT,
+    "activa" BOOLEAN NOT NULL DEFAULT true,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+    "deleted_at" TIMESTAMP(3),
+
+    CONSTRAINT "accounts_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "accounting_entries" (
+    "id" TEXT NOT NULL,
+    "numero" VARCHAR(50) NOT NULL,
+    "fecha" TIMESTAMP(3) NOT NULL,
+    "tipo" "EntryType" NOT NULL,
+    "estado" "EntryStatus" NOT NULL DEFAULT 'borrador',
+    "total_debe" INTEGER NOT NULL,
+    "total_haber" INTEGER NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+    "deleted_at" TIMESTAMP(3),
+
+    CONSTRAINT "accounting_entries_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "entry_movements" (
+    "id" TEXT NOT NULL,
+    "entry_id" TEXT NOT NULL,
+    "account_id" TEXT NOT NULL,
+    "debe" INTEGER NOT NULL DEFAULT 0,
+    "haber" INTEGER NOT NULL DEFAULT 0,
+    "descripcion" VARCHAR(500),
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "entry_movements_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "employees" (
+    "id" TEXT NOT NULL,
+    "rut" VARCHAR(20) NOT NULL,
+    "nombre" VARCHAR(100) NOT NULL,
+    "apellido_paterno" VARCHAR(100) NOT NULL,
+    "apellido_materno" VARCHAR(100) NOT NULL,
+    "email" VARCHAR(255) NOT NULL,
+    "fecha_nacimiento" TIMESTAMP(3) NOT NULL,
+    "fecha_ingreso" TIMESTAMP(3) NOT NULL,
+    "estado" "EmployeeStatus" NOT NULL DEFAULT 'activo',
+    "branch_id" TEXT,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+    "deleted_at" TIMESTAMP(3),
+
+    CONSTRAINT "employees_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "contracts" (
+    "id" TEXT NOT NULL,
+    "employee_id" TEXT NOT NULL,
+    "tipo" VARCHAR(50) NOT NULL,
+    "fecha_inicio" TIMESTAMP(3) NOT NULL,
+    "fecha_termino" TIMESTAMP(3),
+    "sueldo_base" INTEGER NOT NULL,
+    "estado" VARCHAR(50) NOT NULL DEFAULT 'vigente',
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "contracts_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "payrolls" (
+    "id" TEXT NOT NULL,
+    "employee_id" TEXT NOT NULL,
+    "periodo" VARCHAR(7) NOT NULL,
+    "sueldo_base" INTEGER NOT NULL,
+    "bonos" INTEGER NOT NULL DEFAULT 0,
+    "descuentos" INTEGER NOT NULL DEFAULT 0,
+    "total" INTEGER NOT NULL,
+    "estado" VARCHAR(50) NOT NULL DEFAULT 'pendiente',
+    "fecha_pago" TIMESTAMP(3),
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "payrolls_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "contributions" (
+    "id" TEXT NOT NULL,
+    "employee_id" TEXT NOT NULL,
+    "periodo" VARCHAR(7) NOT NULL,
+    "tipo" VARCHAR(50) NOT NULL,
+    "monto" INTEGER NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "contributions_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "users" (
+    "id" TEXT NOT NULL,
+    "username" VARCHAR(50) NOT NULL,
+    "email" VARCHAR(255) NOT NULL,
+    "password_hash" VARCHAR(255) NOT NULL,
+    "nombre" VARCHAR(100) NOT NULL,
+    "apellido" VARCHAR(100) NOT NULL,
+    "activo" BOOLEAN NOT NULL DEFAULT true,
+    "sucursal_id" TEXT NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+    "deleted_at" TIMESTAMP(3),
+
+    CONSTRAINT "users_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "roles" (
+    "id" TEXT NOT NULL,
+    "nombre" VARCHAR(50) NOT NULL,
+    "descripcion" VARCHAR(500) NOT NULL,
+    "activo" BOOLEAN NOT NULL DEFAULT true,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+    "deleted_at" TIMESTAMP(3),
+
+    CONSTRAINT "roles_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "user_roles" (
+    "id" TEXT NOT NULL,
+    "user_id" TEXT NOT NULL,
+    "role_id" TEXT NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "user_roles_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "permissions" (
+    "id" TEXT NOT NULL,
+    "nombre" VARCHAR(100) NOT NULL,
+    "recurso" VARCHAR(50) NOT NULL,
+    "accion" VARCHAR(50) NOT NULL,
+    "descripcion" VARCHAR(500),
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "permissions_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "role_permissions" (
+    "id" TEXT NOT NULL,
+    "role_id" TEXT NOT NULL,
+    "permission_id" TEXT NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "role_permissions_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "settings" (
+    "id" TEXT NOT NULL,
+    "clave" VARCHAR(100) NOT NULL,
+    "valor" TEXT NOT NULL,
+    "categoria" VARCHAR(50) NOT NULL,
+    "descripcion" VARCHAR(500),
+    "editable" BOOLEAN NOT NULL DEFAULT true,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "settings_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateIndex
+CREATE UNIQUE INDEX "products_sku_key" ON "products"("sku");
+
+-- CreateIndex
+CREATE INDEX "products_sku_idx" ON "products"("sku");
+
+-- CreateIndex
+CREATE INDEX "products_categoria_idx" ON "products"("categoria");
+
+-- CreateIndex
+CREATE INDEX "products_juego_idx" ON "products"("juego");
+
+-- CreateIndex
+CREATE INDEX "products_activo_idx" ON "products"("activo");
+
+-- CreateIndex
+CREATE INDEX "stock_by_branch_branch_id_idx" ON "stock_by_branch"("branch_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "stock_by_branch_product_id_branch_id_key" ON "stock_by_branch"("product_id", "branch_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "branches_codigo_key" ON "branches"("codigo");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "customers_email_key" ON "customers"("email");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "customers_rut_key" ON "customers"("rut");
+
+-- CreateIndex
+CREATE INDEX "customers_email_idx" ON "customers"("email");
+
+-- CreateIndex
+CREATE INDEX "customers_rut_idx" ON "customers"("rut");
+
+-- CreateIndex
+CREATE INDEX "customers_estado_idx" ON "customers"("estado");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "orders_numero_key" ON "orders"("numero");
+
+-- CreateIndex
+CREATE INDEX "orders_cliente_id_idx" ON "orders"("cliente_id");
+
+-- CreateIndex
+CREATE INDEX "orders_sucursal_id_idx" ON "orders"("sucursal_id");
+
+-- CreateIndex
+CREATE INDEX "orders_estado_idx" ON "orders"("estado");
+
+-- CreateIndex
+CREATE INDEX "orders_fecha_creacion_idx" ON "orders"("fecha_creacion");
+
+-- CreateIndex
+CREATE INDEX "order_items_order_id_idx" ON "order_items"("order_id");
+
+-- CreateIndex
+CREATE INDEX "order_items_product_id_idx" ON "order_items"("product_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "suppliers_rut_key" ON "suppliers"("rut");
+
+-- CreateIndex
+CREATE INDEX "suppliers_rut_idx" ON "suppliers"("rut");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "receptions_numero_key" ON "receptions"("numero");
+
+-- CreateIndex
+CREATE INDEX "receptions_proveedor_id_idx" ON "receptions"("proveedor_id");
+
+-- CreateIndex
+CREATE INDEX "receptions_sucursal_id_idx" ON "receptions"("sucursal_id");
+
+-- CreateIndex
+CREATE INDEX "receptions_estado_idx" ON "receptions"("estado");
+
+-- CreateIndex
+CREATE INDEX "reception_items_reception_id_idx" ON "reception_items"("reception_id");
+
+-- CreateIndex
+CREATE INDEX "reception_items_product_id_idx" ON "reception_items"("product_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "transfers_numero_key" ON "transfers"("numero");
+
+-- CreateIndex
+CREATE INDEX "transfers_sucursal_origen_id_idx" ON "transfers"("sucursal_origen_id");
+
+-- CreateIndex
+CREATE INDEX "transfers_sucursal_destino_id_idx" ON "transfers"("sucursal_destino_id");
+
+-- CreateIndex
+CREATE INDEX "transfers_estado_idx" ON "transfers"("estado");
+
+-- CreateIndex
+CREATE INDEX "transfer_items_transfer_id_idx" ON "transfer_items"("transfer_id");
+
+-- CreateIndex
+CREATE INDEX "transfer_items_product_id_idx" ON "transfer_items"("product_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "accounts_codigo_key" ON "accounts"("codigo");
+
+-- CreateIndex
+CREATE INDEX "accounts_codigo_idx" ON "accounts"("codigo");
+
+-- CreateIndex
+CREATE INDEX "accounts_tipo_idx" ON "accounts"("tipo");
+
+-- CreateIndex
+CREATE INDEX "accounts_padre_id_idx" ON "accounts"("padre_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "accounting_entries_numero_key" ON "accounting_entries"("numero");
+
+-- CreateIndex
+CREATE INDEX "accounting_entries_fecha_idx" ON "accounting_entries"("fecha");
+
+-- CreateIndex
+CREATE INDEX "accounting_entries_estado_idx" ON "accounting_entries"("estado");
+
+-- CreateIndex
+CREATE INDEX "entry_movements_entry_id_idx" ON "entry_movements"("entry_id");
+
+-- CreateIndex
+CREATE INDEX "entry_movements_account_id_idx" ON "entry_movements"("account_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "employees_rut_key" ON "employees"("rut");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "employees_email_key" ON "employees"("email");
+
+-- CreateIndex
+CREATE INDEX "employees_rut_idx" ON "employees"("rut");
+
+-- CreateIndex
+CREATE INDEX "employees_email_idx" ON "employees"("email");
+
+-- CreateIndex
+CREATE INDEX "employees_estado_idx" ON "employees"("estado");
+
+-- CreateIndex
+CREATE INDEX "contracts_employee_id_idx" ON "contracts"("employee_id");
+
+-- CreateIndex
+CREATE INDEX "contracts_estado_idx" ON "contracts"("estado");
+
+-- CreateIndex
+CREATE INDEX "payrolls_employee_id_idx" ON "payrolls"("employee_id");
+
+-- CreateIndex
+CREATE INDEX "payrolls_periodo_idx" ON "payrolls"("periodo");
+
+-- CreateIndex
+CREATE INDEX "payrolls_estado_idx" ON "payrolls"("estado");
+
+-- CreateIndex
+CREATE INDEX "contributions_employee_id_idx" ON "contributions"("employee_id");
+
+-- CreateIndex
+CREATE INDEX "contributions_periodo_idx" ON "contributions"("periodo");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "users_username_key" ON "users"("username");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "users_email_key" ON "users"("email");
+
+-- CreateIndex
+CREATE INDEX "users_username_idx" ON "users"("username");
+
+-- CreateIndex
+CREATE INDEX "users_email_idx" ON "users"("email");
+
+-- CreateIndex
+CREATE INDEX "users_sucursal_id_idx" ON "users"("sucursal_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "roles_nombre_key" ON "roles"("nombre");
+
+-- CreateIndex
+CREATE INDEX "roles_nombre_idx" ON "roles"("nombre");
+
+-- CreateIndex
+CREATE INDEX "user_roles_user_id_idx" ON "user_roles"("user_id");
+
+-- CreateIndex
+CREATE INDEX "user_roles_role_id_idx" ON "user_roles"("role_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "user_roles_user_id_role_id_key" ON "user_roles"("user_id", "role_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "permissions_nombre_key" ON "permissions"("nombre");
+
+-- CreateIndex
+CREATE INDEX "permissions_recurso_accion_idx" ON "permissions"("recurso", "accion");
+
+-- CreateIndex
+CREATE INDEX "role_permissions_role_id_idx" ON "role_permissions"("role_id");
+
+-- CreateIndex
+CREATE INDEX "role_permissions_permission_id_idx" ON "role_permissions"("permission_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "role_permissions_role_id_permission_id_key" ON "role_permissions"("role_id", "permission_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "settings_clave_key" ON "settings"("clave");
+
+-- CreateIndex
+CREATE INDEX "settings_categoria_idx" ON "settings"("categoria");
+
+-- AddForeignKey
+ALTER TABLE "stock_by_branch" ADD CONSTRAINT "stock_by_branch_product_id_fkey" FOREIGN KEY ("product_id") REFERENCES "products"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "stock_by_branch" ADD CONSTRAINT "stock_by_branch_branch_id_fkey" FOREIGN KEY ("branch_id") REFERENCES "branches"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "orders" ADD CONSTRAINT "orders_cliente_id_fkey" FOREIGN KEY ("cliente_id") REFERENCES "customers"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "orders" ADD CONSTRAINT "orders_sucursal_id_fkey" FOREIGN KEY ("sucursal_id") REFERENCES "branches"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "order_items" ADD CONSTRAINT "order_items_order_id_fkey" FOREIGN KEY ("order_id") REFERENCES "orders"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "order_items" ADD CONSTRAINT "order_items_product_id_fkey" FOREIGN KEY ("product_id") REFERENCES "products"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "receptions" ADD CONSTRAINT "receptions_proveedor_id_fkey" FOREIGN KEY ("proveedor_id") REFERENCES "suppliers"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "receptions" ADD CONSTRAINT "receptions_sucursal_id_fkey" FOREIGN KEY ("sucursal_id") REFERENCES "branches"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "reception_items" ADD CONSTRAINT "reception_items_reception_id_fkey" FOREIGN KEY ("reception_id") REFERENCES "receptions"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "reception_items" ADD CONSTRAINT "reception_items_product_id_fkey" FOREIGN KEY ("product_id") REFERENCES "products"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "transfers" ADD CONSTRAINT "transfers_sucursal_origen_id_fkey" FOREIGN KEY ("sucursal_origen_id") REFERENCES "branches"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "transfers" ADD CONSTRAINT "transfers_sucursal_destino_id_fkey" FOREIGN KEY ("sucursal_destino_id") REFERENCES "branches"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "transfer_items" ADD CONSTRAINT "transfer_items_transfer_id_fkey" FOREIGN KEY ("transfer_id") REFERENCES "transfers"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "transfer_items" ADD CONSTRAINT "transfer_items_product_id_fkey" FOREIGN KEY ("product_id") REFERENCES "products"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "accounts" ADD CONSTRAINT "accounts_padre_id_fkey" FOREIGN KEY ("padre_id") REFERENCES "accounts"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "entry_movements" ADD CONSTRAINT "entry_movements_entry_id_fkey" FOREIGN KEY ("entry_id") REFERENCES "accounting_entries"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "entry_movements" ADD CONSTRAINT "entry_movements_account_id_fkey" FOREIGN KEY ("account_id") REFERENCES "accounts"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "employees" ADD CONSTRAINT "employees_branch_id_fkey" FOREIGN KEY ("branch_id") REFERENCES "branches"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "contracts" ADD CONSTRAINT "contracts_employee_id_fkey" FOREIGN KEY ("employee_id") REFERENCES "employees"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "payrolls" ADD CONSTRAINT "payrolls_employee_id_fkey" FOREIGN KEY ("employee_id") REFERENCES "employees"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "contributions" ADD CONSTRAINT "contributions_employee_id_fkey" FOREIGN KEY ("employee_id") REFERENCES "employees"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "users" ADD CONSTRAINT "users_sucursal_id_fkey" FOREIGN KEY ("sucursal_id") REFERENCES "branches"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "user_roles" ADD CONSTRAINT "user_roles_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "user_roles" ADD CONSTRAINT "user_roles_role_id_fkey" FOREIGN KEY ("role_id") REFERENCES "roles"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "role_permissions" ADD CONSTRAINT "role_permissions_role_id_fkey" FOREIGN KEY ("role_id") REFERENCES "roles"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "role_permissions" ADD CONSTRAINT "role_permissions_permission_id_fkey" FOREIGN KEY ("permission_id") REFERENCES "permissions"("id") ON DELETE CASCADE ON UPDATE CASCADE;

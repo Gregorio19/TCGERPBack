@@ -1,0 +1,648 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Enums
+enum Game {
+  pokemon
+  yugioh
+  magic
+  digimon
+  one_piece
+  dragon_ball
+  naruto
+  bleach
+  final_fantasy
+  card_fight_vanguard
+  weiss_schwarz
+  battle_spirits
+  other
+}
+
+enum Rarity {
+  comun
+  infrecuente
+  rara
+  rara_holo
+  rara_secreta
+  rara_ultra
+  rara_gold
+  rara_rainbow
+  rara_alternate
+  rara_full_art
+  rara_charizard
+  legendary
+  mythic
+}
+
+enum Condition {
+  mint
+  near_mint
+  excellent
+  very_good
+  good
+  fair
+  poor
+  damaged
+}
+
+enum Language {
+  espanol
+  ingles
+  japones
+  chino
+  koreano
+  frances
+  aleman
+  italiano
+  portugues
+  ruso
+}
+
+enum ProductType {
+  single
+  sellado
+  bundle
+  collection
+}
+
+enum OrderStatus {
+  pendiente
+  confirmada
+  en_proceso
+  enviada
+  entregada
+  completada
+  cancelada
+  reembolsada
+  devuelta
+}
+
+enum OrderChannel {
+  tienda_fisica
+  online
+  telefono
+  whatsapp
+  redes_sociales
+  marketplace
+  mayorista
+  evento
+  other
+}
+
+enum DocType {
+  boleta
+  factura
+  nota_credito
+  nota_debito
+  guia_despacho
+  recibo
+}
+
+enum CustomerStatus {
+  activo
+  inactivo
+  suspendido
+}
+
+enum ReceptionStatus {
+  PENDIENTE
+  EN_PROCESO
+  COMPLETADA
+  CANCELADA
+}
+
+enum TransferStatus {
+  PENDIENTE
+  EN_TRANSITO
+  COMPLETADA
+  CANCELADA
+}
+
+enum AccountType {
+  activo
+  pasivo
+  patrimonio
+  ingreso
+  gasto
+  costo
+}
+
+enum EntryType {
+  manual
+  automatico
+  ajuste
+  cierre
+}
+
+enum EntryStatus {
+  borrador
+  aprobado
+  contabilizado
+  anulado
+}
+
+enum EmployeeStatus {
+  activo
+  inactivo
+  suspendido
+  licencia
+}
+
+// Models
+model Product {
+  id              Int          @id @default(autoincrement())
+  nombre          String       @db.VarChar(200)
+  descripcion     String?      @db.VarChar(1000)
+  sku             String?      @unique @db.VarChar(50)
+  juego           Game?
+  set             String?
+  nroColeccionista String?     @map("nro_coleccionista") @db.VarChar(50)
+  rareza          Rarity?
+  idioma          Language?
+  condicion       Condition?
+  tipo            ProductType?
+  precio          Int          // CLP en centavos
+  precioCompra    Int?         @map("precio_compra")
+  iva             Int          @default(19)
+  stock           Int          @default(0)
+  categoria       String
+  imagen          String?      @db.Text
+  imagenes        String[]     @default([])
+  activo          Boolean      @default(true)
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
+  deletedAt       DateTime?    @map("deleted_at")
+
+  // Relations
+  stockByBranch   StockByBranch[]
+  orderItems      OrderItem[]
+  receptionItems  ReceptionItem[]
+  transferItems   TransferItem[]
+
+  @@index([sku])
+  @@index([categoria])
+  @@index([juego])
+  @@index([activo])
+  @@map("products")
+}
+
+model StockByBranch {
+  id          String   @id @default(uuid())
+  productId   Int      @map("product_id")
+  branchId    String   @map("branch_id")
+  cantidad    Int      @default(0)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  branch      Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, branchId])
+  @@index([branchId])
+  @@map("stock_by_branch")
+}
+
+model Branch {
+  id          String   @id @default(uuid())
+  codigo      String   @unique @db.VarChar(20)
+  nombre      String   @db.VarChar(200)
+  direccion   String   @db.VarChar(500)
+  telefono    String?  @db.VarChar(50)
+  activa      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+
+  // Relations
+  stockByBranch   StockByBranch[]
+  orders          Order[]
+  receptions      Reception[]
+  transfersOrigin Transfer[] @relation("TransferOrigin")
+  transfersDest   Transfer[] @relation("TransferDest")
+  users           User[]
+  employees       Employee[]
+
+  @@map("branches")
+}
+
+model Customer {
+  id              String      @id @default(uuid())
+  nombre          String      @db.VarChar(100)
+  apellido        String      @db.VarChar(100)
+  email           String      @unique @db.VarChar(255)
+  telefono        String      @db.VarChar(50)
+  rut             String      @unique @db.VarChar(20)
+  direccion       Json        // JSON object
+  estado          CustomerStatus @default(activo)
+  fechaRegistro   DateTime    @default(now()) @map("fecha_registro")
+  createdAt       DateTime    @default(now()) @map("created_at")
+  updatedAt       DateTime    @updatedAt @map("updated_at")
+  deletedAt       DateTime?   @map("deleted_at")
+
+  // Relations
+  orders          Order[]
+
+  @@index([email])
+  @@index([rut])
+  @@index([estado])
+  @@map("customers")
+}
+
+model Order {
+  id                  String      @id @default(uuid())
+  numero              String      @unique @db.VarChar(50)
+  clienteId           String      @map("cliente_id")
+  estado              OrderStatus @default(pendiente)
+  canal               OrderChannel
+  tipoDocumento       DocType     @map("tipo_documento")
+  subtotal            Int
+  descuentoGeneral    Int         @default(0) @map("descuento_general")
+  subtotalConDescuento Int        @map("subtotal_con_descuento")
+  montoIva            Int         @map("monto_iva")
+  costoEnvio          Int         @default(0) @map("costo_envio")
+  total               Int
+  sucursalId          String      @map("sucursal_id")
+  fechaCreacion       DateTime    @default(now()) @map("fecha_creacion")
+  fechaActualizacion  DateTime    @updatedAt @map("fecha_actualizacion")
+  deletedAt           DateTime?   @map("deleted_at")
+
+  // Relations
+  cliente             Customer    @relation(fields: [clienteId], references: [id])
+  sucursal            Branch      @relation(fields: [sucursalId], references: [id])
+  items               OrderItem[]
+
+  @@index([clienteId])
+  @@index([sucursalId])
+  @@index([estado])
+  @@index([fechaCreacion])
+  @@map("orders")
+}
+
+model OrderItem {
+  id          String   @id @default(uuid())
+  orderId     String   @map("order_id")
+  productId   Int      @map("product_id")
+  cantidad    Int
+  precioUnitario Int   @map("precio_unitario")
+  descuento   Int      @default(0)
+  subtotal    Int
+  total       Int
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product     Product  @relation(fields: [productId], references: [id])
+
+  @@index([orderId])
+  @@index([productId])
+  @@map("order_items")
+}
+
+model Supplier {
+  id          String   @id @default(uuid())
+  nombre      String   @db.VarChar(200)
+  rut         String   @unique @db.VarChar(20)
+  email       String?  @db.VarChar(255)
+  telefono    String?  @db.VarChar(50)
+  direccion   String?  @db.VarChar(500)
+  activo      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+
+  // Relations
+  receptions  Reception[]
+
+  @@index([rut])
+  @@map("suppliers")
+}
+
+model Reception {
+  id              String          @id @default(uuid())
+  numero          String          @unique @db.VarChar(50)
+  proveedorId     String          @map("proveedor_id")
+  sucursalId      String          @map("sucursal_id")
+  fechaRecepcion  DateTime        @map("fecha_recepcion")
+  fechaDocumento  DateTime        @map("fecha_documento")
+  numeroDocumento String          @map("numero_documento") @db.VarChar(50)
+  tipoDocumento   String          @map("tipo_documento") // FACTURA, BOLETA, etc.
+  estado          ReceptionStatus @default(PENDIENTE)
+  total           Int
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+  deletedAt       DateTime?       @map("deleted_at")
+
+  // Relations
+  proveedor       Supplier        @relation(fields: [proveedorId], references: [id])
+  sucursal        Branch          @relation(fields: [sucursalId], references: [id])
+  items           ReceptionItem[]
+
+  @@index([proveedorId])
+  @@index([sucursalId])
+  @@index([estado])
+  @@map("receptions")
+}
+
+model ReceptionItem {
+  id          String    @id @default(uuid())
+  receptionId String    @map("reception_id")
+  productId   Int       @map("product_id")
+  cantidad    Int
+  precioUnitario Int    @map("precio_unitario")
+  subtotal    Int
+  total       Int
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  reception   Reception @relation(fields: [receptionId], references: [id], onDelete: Cascade)
+  product     Product   @relation(fields: [productId], references: [id])
+
+  @@index([receptionId])
+  @@index([productId])
+  @@map("reception_items")
+}
+
+model Transfer {
+  id                  String        @id @default(uuid())
+  numero              String        @unique @db.VarChar(50)
+  sucursalOrigenId    String        @map("sucursal_origen_id")
+  sucursalDestinoId   String        @map("sucursal_destino_id")
+  fechaTransferencia  DateTime      @map("fecha_transferencia")
+  estado              TransferStatus @default(PENDIENTE)
+  createdAt           DateTime      @default(now()) @map("created_at")
+  updatedAt           DateTime      @updatedAt @map("updated_at")
+  deletedAt           DateTime?     @map("deleted_at")
+
+  // Relations
+  sucursalOrigen      Branch        @relation("TransferOrigin", fields: [sucursalOrigenId], references: [id])
+  sucursalDestino     Branch        @relation("TransferDest", fields: [sucursalDestinoId], references: [id])
+  items               TransferItem[]
+
+  @@index([sucursalOrigenId])
+  @@index([sucursalDestinoId])
+  @@index([estado])
+  @@map("transfers")
+}
+
+model TransferItem {
+  id          String   @id @default(uuid())
+  transferId  String   @map("transfer_id")
+  productId   Int      @map("product_id")
+  cantidad    Int
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  transfer    Transfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  product     Product  @relation(fields: [productId], references: [id])
+
+  @@index([transferId])
+  @@index([productId])
+  @@map("transfer_items")
+}
+
+model Account {
+  id          String      @id @default(uuid())
+  codigo      String      @unique @db.VarChar(10)
+  nombre      String      @db.VarChar(200)
+  tipo        AccountType
+  nivel       Int
+  padreId     String?     @map("padre_id")
+  activa      Boolean     @default(true)
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
+  deletedAt   DateTime?   @map("deleted_at")
+
+  // Relations
+  padre       Account?    @relation("AccountHierarchy", fields: [padreId], references: [id])
+  hijos       Account[]   @relation("AccountHierarchy")
+  movimientos EntryMovement[]
+
+  @@index([codigo])
+  @@index([tipo])
+  @@index([padreId])
+  @@map("accounts")
+}
+
+model AccountingEntry {
+  id          String      @id @default(uuid())
+  numero      String      @unique @db.VarChar(50)
+  fecha       DateTime
+  tipo        EntryType
+  estado      EntryStatus @default(borrador)
+  totalDebe   Int         @map("total_debe")
+  totalHaber  Int         @map("total_haber")
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
+  deletedAt   DateTime?   @map("deleted_at")
+
+  // Relations
+  movimientos EntryMovement[]
+
+  @@index([fecha])
+  @@index([estado])
+  @@map("accounting_entries")
+}
+
+model EntryMovement {
+  id          String          @id @default(uuid())
+  entryId     String          @map("entry_id")
+  accountId   String          @map("account_id")
+  debe        Int             @default(0)
+  haber       Int             @default(0)
+  descripcion String?         @db.VarChar(500)
+  createdAt   DateTime        @default(now()) @map("created_at")
+
+  entry       AccountingEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  account     Account         @relation(fields: [accountId], references: [id])
+
+  @@index([entryId])
+  @@index([accountId])
+  @@map("entry_movements")
+}
+
+model Employee {
+  id                String        @id @default(uuid())
+  rut               String        @unique @db.VarChar(20)
+  nombre            String        @db.VarChar(100)
+  apellidoPaterno   String        @map("apellido_paterno") @db.VarChar(100)
+  apellidoMaterno   String        @map("apellido_materno") @db.VarChar(100)
+  email             String        @unique @db.VarChar(255)
+  fechaNacimiento   DateTime      @map("fecha_nacimiento")
+  fechaIngreso      DateTime      @map("fecha_ingreso")
+  estado            EmployeeStatus @default(activo)
+  branchId          String?       @map("branch_id")
+  createdAt         DateTime      @default(now()) @map("created_at")
+  updatedAt         DateTime      @updatedAt @map("updated_at")
+  deletedAt         DateTime?     @map("deleted_at")
+
+  // Relations
+  branch            Branch?       @relation(fields: [branchId], references: [id])
+  contracts         Contract[]
+  payrolls          Payroll[]
+  contributions     Contribution[]
+
+  @@index([rut])
+  @@index([email])
+  @@index([estado])
+  @@map("employees")
+}
+
+model Contract {
+  id              String    @id @default(uuid())
+  employeeId      String    @map("employee_id")
+  tipo            String    @db.VarChar(50)
+  fechaInicio     DateTime  @map("fecha_inicio")
+  fechaTermino    DateTime? @map("fecha_termino")
+  sueldoBase      Int       @map("sueldo_base")
+  estado          String    @default("vigente") @db.VarChar(50)
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  employee        Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+  @@index([estado])
+  @@map("contracts")
+}
+
+model Payroll {
+  id          String    @id @default(uuid())
+  employeeId  String    @map("employee_id")
+  periodo     String    @db.VarChar(7) // YYYY-MM
+  sueldoBase  Int       @map("sueldo_base")
+  bonos       Int       @default(0)
+  descuentos  Int       @default(0)
+  total       Int
+  estado      String    @default("pendiente") @db.VarChar(50)
+  fechaPago   DateTime? @map("fecha_pago")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  employee    Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+  @@index([periodo])
+  @@index([estado])
+  @@map("payrolls")
+}
+
+model Contribution {
+  id          String    @id @default(uuid())
+  employeeId  String    @map("employee_id")
+  periodo     String    @db.VarChar(7) // YYYY-MM
+  tipo        String    @db.VarChar(50) // AFP, SALUD, etc.
+  monto       Int
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  employee    Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+  @@index([periodo])
+  @@map("contributions")
+}
+
+model User {
+  id          String   @id @default(uuid())
+  username    String   @unique @db.VarChar(50)
+  email       String   @unique @db.VarChar(255)
+  passwordHash String  @map("password_hash") @db.VarChar(255)
+  nombre      String   @db.VarChar(100)
+  apellido    String   @db.VarChar(100)
+  activo      Boolean  @default(true)
+  sucursalId  String   @map("sucursal_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+
+  // Relations
+  sucursal    Branch   @relation(fields: [sucursalId], references: [id])
+  userRoles   UserRole[]
+
+  @@index([username])
+  @@index([email])
+  @@index([sucursalId])
+  @@map("users")
+}
+
+model Role {
+  id          String   @id @default(uuid())
+  nombre      String   @unique @db.VarChar(50)
+  descripcion String   @db.VarChar(500)
+  activo      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+
+  // Relations
+  userRoles   UserRole[]
+  rolePermissions RolePermission[]
+
+  @@index([nombre])
+  @@map("roles")
+}
+
+model UserRole {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  roleId    String   @map("role_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roleId])
+  @@index([userId])
+  @@index([roleId])
+  @@map("user_roles")
+}
+
+model Permission {
+  id          String   @id @default(uuid())
+  nombre      String   @unique @db.VarChar(100)
+  recurso     String   @db.VarChar(50)
+  accion      String   @db.VarChar(50)
+  descripcion String?  @db.VarChar(500)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  // Relations
+  rolePermissions RolePermission[]
+
+  @@index([recurso, accion])
+  @@map("permissions")
+}
+
+model RolePermission {
+  id           String     @id @default(uuid())
+  roleId       String     @map("role_id")
+  permissionId String     @map("permission_id")
+  createdAt    DateTime   @default(now()) @map("created_at")
+
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+  @@index([roleId])
+  @@index([permissionId])
+  @@map("role_permissions")
+}
+
+model Setting {
+  id          String   @id @default(uuid())
+  clave       String   @unique @db.VarChar(100)
+  valor       String   @db.Text
+  categoria   String   @db.VarChar(50)
+  descripcion String?  @db.VarChar(500)
+  editable    Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([categoria])
+  @@map("settings")
+}
+

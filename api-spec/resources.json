@@ -1,0 +1,237 @@
+{
+  "resources": {
+    "Product": {
+      "description": "Producto TCG (carta individual o producto sellado)",
+      "fields": {
+        "id": { "type": "integer", "required": true, "description": "ID numérico (legacy)" },
+        "nombre": { "type": "string", "required": true, "maxLength": 200 },
+        "descripcion": { "type": "string", "required": false, "maxLength": 1000 },
+        "sku": { "type": "string", "required": false, "unique": true, "description": "SKU único del producto" },
+        "juego": { "type": "enum", "required": false, "enum": ["pokemon", "yugioh", "magic", "digimon", "one_piece", "dragon_ball", "naruto", "bleach", "final_fantasy", "card_fight_vanguard", "weiss_schwarz", "battle_spirits", "other"] },
+        "set": { "type": "string", "required": false },
+        "nro_coleccionista": { "type": "string", "required": false, "description": "Número de coleccionista de la carta" },
+        "rareza": { "type": "enum", "required": false, "enum": ["comun", "infrecuente", "rara", "rara_holo", "rara_secreta", "rara_ultra", "rara_gold", "rara_rainbow", "rara_alternate", "rara_full_art", "rara_charizard", "legendary", "mythic"] },
+        "idioma": { "type": "enum", "required": false, "enum": ["espanol", "ingles", "japones", "chino", "koreano", "frances", "aleman", "italiano", "portugues", "ruso"] },
+        "condicion": { "type": "enum", "required": false, "enum": ["mint", "near_mint", "excellent", "very_good", "good", "fair", "poor", "damaged"] },
+        "tipo": { "type": "enum", "required": false, "enum": ["single", "sellado", "bundle", "collection"] },
+        "precio": { "type": "integer", "required": true, "min": 1, "description": "Precio en CLP (centavos)" },
+        "precio_compra": { "type": "integer", "required": false, "min": 0 },
+        "iva": { "type": "integer", "required": false, "default": 19, "description": "Porcentaje de IVA" },
+        "stock": { "type": "integer", "required": true, "min": 0 },
+        "categoria": { "type": "string", "required": true },
+        "imagen": { "type": "string", "required": false, "format": "uri" },
+        "imagenes": { "type": "array", "required": false, "items": { "type": "string", "format": "uri" } },
+        "stock_sucursales": { "type": "object", "required": false, "description": "Stock por sucursal" },
+        "activo": { "type": "boolean", "required": true, "default": true },
+        "createdAt": { "type": "string", "required": true, "format": "date-time" },
+        "updatedAt": { "type": "string", "required": true, "format": "date-time" }
+      },
+      "relationships": {
+        "stock_sucursales": { "type": "1-N", "target": "StockByBranch" }
+      },
+      "businessRules": [
+        "SKU debe ser único",
+        "Si tipo === 'single', requiere: nro_coleccionista, rareza, condicion, idioma",
+        "Si tipo === 'sellado', no requiere nro_coleccionista, rareza, condicion",
+        "Precio debe ser > 0",
+        "Stock no puede ser negativo"
+      ]
+    },
+    "Order": {
+      "description": "Orden de venta",
+      "fields": {
+        "id": { "type": "string", "required": true, "format": "uuid" },
+        "numero": { "type": "string", "required": true, "unique": true },
+        "clienteId": { "type": "string", "required": true, "format": "uuid" },
+        "estado": { "type": "enum", "required": true, "enum": ["pendiente", "confirmada", "en_proceso", "enviada", "entregada", "completada", "cancelada", "reembolsada", "devuelta"] },
+        "canal": { "type": "enum", "required": true, "enum": ["tienda_fisica", "online", "telefono", "whatsapp", "redes_sociales", "marketplace", "mayorista", "evento", "other"] },
+        "tipoDocumento": { "type": "enum", "required": true, "enum": ["boleta", "factura", "nota_credito", "nota_debito", "guia_despacho", "recibo"] },
+        "items": { "type": "array", "required": true, "minItems": 1, "items": { "$ref": "OrderItem" } },
+        "subtotal": { "type": "integer", "required": true, "min": 0 },
+        "descuentoGeneral": { "type": "integer", "required": false, "default": 0 },
+        "subtotalConDescuento": { "type": "integer", "required": true },
+        "montoIva": { "type": "integer", "required": true },
+        "costoEnvio": { "type": "integer", "required": false, "default": 0 },
+        "total": { "type": "integer", "required": true, "min": 0 },
+        "sucursalId": { "type": "string", "required": true, "format": "uuid" },
+        "fechaCreacion": { "type": "string", "required": true, "format": "date-time" },
+        "fechaActualizacion": { "type": "string", "required": true, "format": "date-time" }
+      },
+      "relationships": {
+        "cliente": { "type": "N-1", "target": "Customer" },
+        "items": { "type": "1-N", "target": "OrderItem" },
+        "pagos": { "type": "1-N", "target": "Payment" },
+        "sucursal": { "type": "N-1", "target": "Branch" }
+      },
+      "businessRules": [
+        "Debe tener al menos un item",
+        "Total debe coincidir con suma de items",
+        "No se puede modificar orden ya procesada",
+        "No se puede cancelar orden ya entregada"
+      ]
+    },
+    "Customer": {
+      "description": "Cliente del sistema",
+      "fields": {
+        "id": { "type": "string", "required": true, "format": "uuid" },
+        "nombre": { "type": "string", "required": true, "maxLength": 100 },
+        "apellido": { "type": "string", "required": true, "maxLength": 100 },
+        "email": { "type": "string", "required": true, "format": "email", "unique": true },
+        "telefono": { "type": "string", "required": true },
+        "rut": { "type": "string", "required": true, "format": "rut", "unique": true },
+        "direccion": { "type": "object", "required": true },
+        "estado": { "type": "enum", "required": true, "enum": ["activo", "inactivo", "suspendido"] },
+        "fechaRegistro": { "type": "string", "required": true, "format": "date-time" }
+      },
+      "relationships": {
+        "ordenes": { "type": "1-N", "target": "Order" }
+      }
+    },
+    "Recepcion": {
+      "description": "Recepción de productos de proveedor",
+      "fields": {
+        "id": { "type": "string", "required": true, "format": "uuid" },
+        "numero": { "type": "string", "required": true, "unique": true },
+        "proveedorId": { "type": "string", "required": true, "format": "uuid" },
+        "sucursalId": { "type": "string", "required": true, "format": "uuid" },
+        "fechaRecepcion": { "type": "string", "required": true, "format": "date-time" },
+        "fechaDocumento": { "type": "string", "required": true, "format": "date" },
+        "numeroDocumento": { "type": "string", "required": true },
+        "tipoDocumento": { "type": "enum", "required": true, "enum": ["FACTURA", "BOLETA", "NOTA_CREDITO", "NOTA_DEBITO", "GUIA_DESPACHO", "RECIBO"] },
+        "estado": { "type": "enum", "required": true, "enum": ["PENDIENTE", "EN_PROCESO", "COMPLETADA", "CANCELADA"] },
+        "total": { "type": "integer", "required": true, "min": 0 },
+        "items": { "type": "array", "required": true, "minItems": 1 }
+      },
+      "relationships": {
+        "proveedor": { "type": "N-1", "target": "Proveedor" },
+        "sucursal": { "type": "N-1", "target": "Branch" }
+      }
+    },
+    "Transferencia": {
+      "description": "Transferencia de productos entre sucursales",
+      "fields": {
+        "id": { "type": "string", "required": true, "format": "uuid" },
+        "numero": { "type": "string", "required": true, "unique": true },
+        "sucursalOrigenId": { "type": "string", "required": true, "format": "uuid" },
+        "sucursalDestinoId": { "type": "string", "required": true, "format": "uuid" },
+        "fechaTransferencia": { "type": "string", "required": true, "format": "date-time" },
+        "estado": { "type": "enum", "required": true, "enum": ["PENDIENTE", "EN_TRANSITO", "COMPLETADA", "CANCELADA"] },
+        "items": { "type": "array", "required": true, "minItems": 1 }
+      },
+      "relationships": {
+        "sucursalOrigen": { "type": "N-1", "target": "Branch" },
+        "sucursalDestino": { "type": "N-1", "target": "Branch" }
+      },
+      "businessRules": [
+        "Requiere stock disponible en sucursal origen",
+        "No se puede transferir a la misma sucursal"
+      ]
+    },
+    "Account": {
+      "description": "Cuenta contable",
+      "fields": {
+        "id": { "type": "string", "required": true, "format": "uuid" },
+        "codigo": { "type": "string", "required": true, "unique": true },
+        "nombre": { "type": "string", "required": true },
+        "tipo": { "type": "enum", "required": true, "enum": ["activo", "pasivo", "patrimonio", "ingreso", "gasto", "costo"] },
+        "nivel": { "type": "integer", "required": true, "min": 1, "max": 5 },
+        "padreId": { "type": "string", "required": false, "format": "uuid" },
+        "activa": { "type": "boolean", "required": true, "default": true }
+      },
+      "relationships": {
+        "padre": { "type": "N-1", "target": "Account" },
+        "hijos": { "type": "1-N", "target": "Account" }
+      },
+      "businessRules": [
+        "Código debe ser único",
+        "Nivel hijo debe ser > nivel padre",
+        "No se puede eliminar cuenta con movimientos"
+      ]
+    },
+    "AsientoContable": {
+      "description": "Asiento contable",
+      "fields": {
+        "id": { "type": "string", "required": true, "format": "uuid" },
+        "numero": { "type": "string", "required": true, "unique": true },
+        "fecha": { "type": "string", "required": true, "format": "date" },
+        "tipo": { "type": "enum", "required": true, "enum": ["manual", "automatico", "ajuste", "cierre"] },
+        "estado": { "type": "enum", "required": true, "enum": ["borrador", "aprobado", "contabilizado", "anulado"] },
+        "totalDebe": { "type": "integer", "required": true },
+        "totalHaber": { "type": "integer", "required": true },
+        "movimientos": { "type": "array", "required": true, "minItems": 2 }
+      },
+      "businessRules": [
+        "totalDebe debe ser igual a totalHaber",
+        "Debe tener al menos 2 movimientos",
+        "No se puede modificar asiento ya contabilizado"
+      ]
+    },
+    "Employee": {
+      "description": "Empleado",
+      "fields": {
+        "id": { "type": "string", "required": true, "format": "uuid" },
+        "rut": { "type": "string", "required": true, "format": "rut", "unique": true },
+        "nombre": { "type": "string", "required": true },
+        "apellidoPaterno": { "type": "string", "required": true },
+        "apellidoMaterno": { "type": "string", "required": true },
+        "email": { "type": "string", "required": true, "format": "email", "unique": true },
+        "fechaNacimiento": { "type": "string", "required": true, "format": "date" },
+        "fechaIngreso": { "type": "string", "required": true, "format": "date" },
+        "estado": { "type": "enum", "required": true, "enum": ["activo", "inactivo", "suspendido", "licencia"] }
+      },
+      "relationships": {
+        "contratos": { "type": "1-N", "target": "Contract" },
+        "nominas": { "type": "1-N", "target": "Nomina" }
+      }
+    },
+    "User": {
+      "description": "Usuario del sistema",
+      "fields": {
+        "id": { "type": "string", "required": true, "format": "uuid" },
+        "username": { "type": "string", "required": true, "unique": true },
+        "email": { "type": "string", "required": true, "format": "email", "unique": true },
+        "nombre": { "type": "string", "required": true },
+        "apellido": { "type": "string", "required": true },
+        "activo": { "type": "boolean", "required": true, "default": true },
+        "sucursalId": { "type": "string", "required": true, "format": "uuid" }
+      },
+      "relationships": {
+        "roles": { "type": "N-N", "target": "Role" },
+        "sucursal": { "type": "N-1", "target": "Branch" }
+      }
+    },
+    "Role": {
+      "description": "Rol de usuario",
+      "fields": {
+        "id": { "type": "string", "required": true, "format": "uuid" },
+        "nombre": { "type": "string", "required": true, "unique": true },
+        "descripcion": { "type": "string", "required": true },
+        "activo": { "type": "boolean", "required": true, "default": true }
+      },
+      "relationships": {
+        "permisos": { "type": "N-N", "target": "Permission" },
+        "usuarios": { "type": "N-N", "target": "User" }
+      }
+    },
+    "Branch": {
+      "description": "Sucursal",
+      "fields": {
+        "id": { "type": "string", "required": true, "format": "uuid" },
+        "codigo": { "type": "string", "required": true, "unique": true },
+        "nombre": { "type": "string", "required": true },
+        "direccion": { "type": "string", "required": true },
+        "activa": { "type": "boolean", "required": true, "default": true }
+      }
+    }
+  },
+  "frontendMapping": {
+    "Product": {
+      "precio": "Precio en CLP (frontend muestra en pesos)",
+      "stock": "Stock total (frontend calcula por sucursal)"
+    },
+    "Order": {
+      "numero": "Número de orden (frontend genera formato legible)",
+      "estado": "Estado de orden (frontend muestra badge)"
+    }
+  }
+}
