@@ -32,9 +32,11 @@ authRouter.post('/login', validateBody(loginDto), async (c) => {
     throw new AppError(ErrorCodes.UNAUTHORIZED, 'Credenciales inválidas', 401);
   }
 
-  // Verificar contraseña (placeholder - en producción usar hash)
-  // Por ahora, aceptamos cualquier contraseña para usuarios existentes
-  // En producción: const isValid = await comparePassword(password, user.passwordHash);
+  // Verificar contraseña
+  const isValid = await comparePassword(password, user.passwordHash);
+  if (!isValid) {
+    throw new AppError(ErrorCodes.UNAUTHORIZED, 'Credenciales inválidas', 401);
+  }
 
   // Obtener el primer rol del usuario (o 'Viewer' por defecto)
   const role = user.userRoles[0]?.role?.nombre || 'Viewer';
