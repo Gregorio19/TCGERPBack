@@ -4,6 +4,7 @@ import { uuidSchema, clpSchema } from '../../lib/validation.js';
 // Enums
 export const OrderStatusEnum = z.enum([
   'pendiente',
+  'voucher_impreso',
   'confirmada',
   'en_proceso',
   'enviada',

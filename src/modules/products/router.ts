@@ -43,10 +43,49 @@ productsRouter.get(
       tipo: query.tipo,
       precioMin: query.precioMin ? parseInt(query.precioMin, 10) : undefined,
       precioMax: query.precioMax ? parseInt(query.precioMax, 10) : undefined,
-      stockDisponible: query.stockDisponible === 'true',
+      // Frontend envía stockMinimo o stockDisponible
+      stockDisponible: (query.stockDisponible === 'true' || query.stockMinimo === 'true'),
     };
 
     const result = await productService.list({ ...pagination, ...filters });
+    return ok(c, {
+      ...result,
+      data: result.data.map(mapProduct),
+    });
+  }
+);
+
+// Listar productos inactivos (solo autenticados con permisos)
+productsRouter.get(
+  '/inactive',
+  authJWT,
+  rbacGuard,
+  validateQuery(listProductsQueryDto),
+  async (c) => {
+    const query = (c as any).get('validatedQuery') as z.infer<typeof listProductsQueryDto>;
+    const queryRecord: Record<string, string | undefined> = {};
+    if (query.page) queryRecord.page = query.page;
+    if (query.limit) queryRecord.limit = query.limit;
+    if (query.pageSize) queryRecord.pageSize = query.pageSize;
+    if (query.sortBy) queryRecord.sortBy = query.sortBy;
+    if (query.sortOrder) queryRecord.sortOrder = query.sortOrder;
+    if (query.sortDir) queryRecord.sortDir = query.sortDir;
+    if (query.search) queryRecord.search = query.search;
+    if (query.q) queryRecord.q = query.q;
+    const pagination = parsePagination(queryRecord);
+    const filters = {
+      category: query.category,
+      juego: query.juego,
+      rareza: query.rareza,
+      idioma: query.idioma,
+      condicion: query.condicion,
+      tipo: query.tipo,
+      precioMin: query.precioMin ? parseInt(query.precioMin, 10) : undefined,
+      precioMax: query.precioMax ? parseInt(query.precioMax, 10) : undefined,
+      stockDisponible: (query.stockDisponible === 'true' || query.stockMinimo === 'true'),
+    };
+
+    const result = await productService.listInactive({ ...pagination, ...filters });
     return ok(c, {
       ...result,
       data: result.data.map(mapProduct),

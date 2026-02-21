@@ -7,10 +7,11 @@ export const createSupplierDto = z.object({
   email: z.string().email().optional().or(z.literal('')),
   telefono: z.string().optional().or(z.literal('')),
   direccion: z.string().optional().or(z.literal('')),
+  contacto: z.string().optional().or(z.literal('')), // Campo adicional para compatibilidad con frontend
   activo: z.boolean().optional().default(true),
 });
 
-export const updateSupplierDto = createSupplierDto.partial().strict();
+export const updateSupplierDto = createSupplierDto.partial();
 
 export const listSuppliersQueryDto = z.object({
   page: z.string().optional(),

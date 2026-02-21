@@ -57,14 +57,39 @@ export const supplierService = {
       throw new AppError(ErrorCodes.BAD_REQUEST, `Ya existe un proveedor con el RUT ${data.rut}`, 400);
     }
 
-    return await db.supplier.create({ data });
+    // Filtrar campos que no existen en el schema
+    const allowedFields = ['nombre', 'rut', 'email', 'telefono', 'direccion', 'contacto', 'activo'];
+    const filteredData: any = {};
+    
+    for (const key of allowedFields) {
+      if (data[key] !== undefined) {
+        filteredData[key] = data[key];
+      }
+    }
+    
+    // Ignorar fechaActualizacion ya que updatedAt se actualiza automáticamente
+
+    return await db.supplier.create({ data: filteredData });
   },
 
   async update(id: string, data: any) {
     await this.getById(id);
+    
+    // Filtrar campos que no existen en el schema
+    const allowedFields = ['nombre', 'rut', 'email', 'telefono', 'direccion', 'contacto', 'activo'];
+    const filteredData: any = {};
+    
+    for (const key of allowedFields) {
+      if (data[key] !== undefined) {
+        filteredData[key] = data[key];
+      }
+    }
+    
+    // Ignorar fechaActualizacion ya que updatedAt se actualiza automáticamente
+    
     return await db.supplier.update({
       where: { id },
-      data,
+      data: filteredData,
     });
   },
 

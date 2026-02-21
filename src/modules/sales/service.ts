@@ -2,6 +2,7 @@ import { db } from '../../lib/db.js';
 import { AppError, ErrorCodes } from '../../lib/errors.js';
 import { PaginationParams, buildPaginatedResponse } from '../../lib/pagination.js';
 import { Prisma, OrderStatus, OrderChannel } from '@prisma/client';
+import { inventoryService } from '../inventory/service.js';
 
 // Función para generar número de orden único
 async function generateOrderNumber(): Promise<string> {
@@ -63,7 +64,8 @@ function calculateOrderTotals(items: Array<{
 // Validar transiciones de estado
 function validateStateTransition(currentState: OrderStatus, newState: OrderStatus): boolean {
   const validTransitions: Record<OrderStatus, OrderStatus[]> = {
-    pendiente: ['confirmada', 'cancelada'],
+    pendiente: ['confirmada', 'voucher_impreso', 'cancelada'],
+    voucher_impreso: ['en_proceso', 'confirmada', 'completada', 'cancelada'],
     confirmada: ['en_proceso', 'cancelada'],
     en_proceso: ['enviada', 'cancelada'],
     enviada: ['entregada', 'cancelada'],
@@ -404,6 +406,34 @@ export const orderService = {
       await db.orderItem.deleteMany({
         where: { orderId: id },
       });
+    }
+
+    // Al pasar a 'completada', descontar inventario (sucursal o, si no hay, stock global)
+    if (data.estado === 'completada' && existing.estado !== 'completada') {
+      const itemsToDeduct = data.items ?? existing.items;
+      for (const item of itemsToDeduct) {
+        try {
+          await inventoryService.adjustInventory({
+            productoId: item.productId,
+            branchId: existing.sucursalId,
+            cantidad: item.cantidad,
+            motivo: `Venta orden ${existing.numero}`,
+            tipo: 'salida',
+          });
+        } catch (err: any) {
+          // Si no hay stock en sucursal (StockByBranch 0 o inexistente), usar stock global
+          if (err?.code === ErrorCodes.INSUFFICIENT_STOCK) {
+            await inventoryService.adjustInventory({
+              productoId: item.productId,
+              cantidad: item.cantidad,
+              motivo: `Venta orden ${existing.numero} (sucursal sin stock)`,
+              tipo: 'salida',
+            });
+          } else {
+            throw err;
+          }
+        }
+      }
     }
 
     const updateData: any = {

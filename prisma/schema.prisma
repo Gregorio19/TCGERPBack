@@ -76,6 +76,7 @@ enum ProductType {
 
 enum OrderStatus {
   pendiente
+  voucher_impreso
   confirmada
   en_proceso
   enviada
@@ -313,6 +314,7 @@ model Supplier {
   email       String?  @db.VarChar(255)
   telefono    String?  @db.VarChar(50)
   direccion   String?  @db.VarChar(500)
+  contacto    String?  @db.VarChar(200)
   activo      Boolean  @default(true)
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")

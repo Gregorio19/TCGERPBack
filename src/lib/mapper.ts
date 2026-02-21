@@ -19,7 +19,7 @@ export const mapProduct = (product: any) => {
     createdAt: toISOString(product.createdAt),
     updatedAt: toISOString(product.updatedAt),
     precio: toCLP(product.precio),
-    precioCompra: product.precioCompra ? toCLP(product.precioCompra) : null,
+    precioCompra: product.precioCompra != null ? toCLP(product.precioCompra) : null,
   };
 };
 

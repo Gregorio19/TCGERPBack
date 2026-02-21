@@ -97,26 +97,39 @@ export const createProductDto = z
     }
   );
 
-export const updateProductDto = z.object({
-  nombre: z.string().min(1).max(200).optional(),
-  descripcion: z.string().max(1000).optional(),
-  sku: z.string().max(50).regex(/^[A-Z0-9-]+$/).optional(),
-  juego: GameEnum.optional(),
-  set: z.string().optional(),
-  nro_coleccionista: z.string().optional(),
-  rareza: RarityEnum.optional(),
-  idioma: LanguageEnum.optional(),
-  condicion: ConditionEnum.optional(),
-  tipo: ProductTypeEnum.optional(),
-  precio: clpSchema.min(1).optional(),
-  precio_compra: clpSchema.optional(),
-  iva: z.number().int().min(0).max(100).optional(),
-  stock: z.number().int().min(0).optional(),
-  categoria: z.string().min(1).optional(),
-  imagen: z.string().url().optional(),
-  imagenes: z.array(z.string().url()).optional(),
-  activo: z.boolean().optional(),
-});
+export const updateProductDto = z
+  .object({
+    nombre: z.string().min(1).max(200).optional(),
+    descripcion: z.string().max(1000).optional(),
+    sku: z.string().max(50).regex(/^[A-Z0-9-]+$/).optional(),
+    juego: GameEnum.optional(),
+    set: z.string().optional(),
+    nro_coleccionista: z.string().optional(),
+    nroColeccionista: z.string().optional(), // Alias para compatibilidad con frontend
+    rareza: RarityEnum.optional(),
+    idioma: LanguageEnum.optional(),
+    condicion: ConditionEnum.optional(),
+    tipo: ProductTypeEnum.optional(),
+    precio: clpSchema.min(1).optional(),
+    precio_compra: clpSchema.optional(),
+    iva: z.number().int().min(0).max(100).optional(),
+    stock: z.number().int().min(0).optional(),
+    categoria: z.string().min(1).optional(),
+    imagen: z.string().url().optional(),
+    imagenes: z.array(z.string().url()).optional(),
+    activo: z.boolean().optional(),
+  })
+  .transform((data) => {
+    // Normalizar nroColeccionista a nro_coleccionista si viene en camelCase
+    if (data.nroColeccionista !== undefined && data.nro_coleccionista === undefined) {
+      return {
+        ...data,
+        nro_coleccionista: data.nroColeccionista,
+        nroColeccionista: undefined,
+      };
+    }
+    return data;
+  });
 
 export const listProductsQueryDto = z.object({
   page: z.string().optional(),
@@ -136,6 +149,7 @@ export const listProductsQueryDto = z.object({
   precioMin: z.string().optional(),
   precioMax: z.string().optional(),
   stockDisponible: z.string().optional(),
+  stockMinimo: z.string().optional(), // Alias para stockDisponible solicitado por frontend
 });
 
 export const productIdParamDto = z.object({
