@@ -1,13 +1,43 @@
+import { randomBytes } from 'node:crypto';
 import { db } from '../../../lib/db.js';
 import { AppError, ErrorCodes } from '../../../lib/errors.js';
 import { PaginationParams, buildPaginatedResponse } from '../../../lib/pagination.js';
 import { Prisma } from '@prisma/client';
 import { hashPassword } from '../../../lib/auth.js';
+import { mapUsuario } from '../mapper.js';
+
+const userInclude = {
+  sucursal: true,
+  userRoles: {
+    include: {
+      role: true,
+    },
+  },
+} as const;
+
+async function validateRoleIds(roleIds: string[]) {
+  if (roleIds.length === 0) return;
+  const rows = await db.role.findMany({
+    where: { id: { in: roleIds }, deletedAt: null },
+  });
+  if (rows.length !== roleIds.length) {
+    throw new AppError(ErrorCodes.VALIDATION_ERROR, 'Uno o más roles no existen o están inactivos', 422);
+  }
+}
 
 export const userService = {
-  async list(params: PaginationParams & { search?: string; sucursalId?: string; activo?: boolean }) {
+  async list(
+    params: PaginationParams & {
+      search?: string;
+      sucursalId?: string;
+      activo?: boolean;
+      rolId?: string;
+      fechaCreacionDesde?: string;
+      fechaCreacionHasta?: string;
+    }
+  ) {
     const page = Number(params.page) || 1;
-    const limit = Number(params.limit) || 10;
+    const limit = Number(params.pageSize) || 10;
     const skip = (page - 1) * limit;
 
     const where: Prisma.UserWhereInput = {
@@ -15,11 +45,14 @@ export const userService = {
     };
 
     if (params.search) {
+      const q = params.search;
       where.OR = [
-        { username: { contains: params.search, mode: 'insensitive' } },
-        { nombre: { contains: params.search, mode: 'insensitive' } },
-        { apellido: { contains: params.search, mode: 'insensitive' } },
-        { email: { contains: params.search, mode: 'insensitive' } },
+        { username: { contains: q, mode: 'insensitive' } },
+        { nombre: { contains: q, mode: 'insensitive' } },
+        { apellido: { contains: q, mode: 'insensitive' } },
+        { email: { contains: q, mode: 'insensitive' } },
+        { sucursal: { nombre: { contains: q, mode: 'insensitive' } } },
+        { userRoles: { some: { role: { nombre: { contains: q, mode: 'insensitive' } } } } },
       ];
     }
 
@@ -31,6 +64,20 @@ export const userService = {
       where.activo = params.activo;
     }
 
+    if (params.rolId) {
+      where.userRoles = { some: { roleId: params.rolId } };
+    }
+
+    if (params.fechaCreacionDesde || params.fechaCreacionHasta) {
+      where.createdAt = {};
+      if (params.fechaCreacionDesde) {
+        where.createdAt.gte = new Date(params.fechaCreacionDesde);
+      }
+      if (params.fechaCreacionHasta) {
+        where.createdAt.lte = new Date(params.fechaCreacionHasta);
+      }
+    }
+
     const [total, data] = await Promise.all([
       db.user.count({ where }),
       db.user.findMany({
@@ -40,84 +87,64 @@ export const userService = {
         orderBy: params.sortBy
           ? { [params.sortBy]: params.sortDir || 'asc' }
           : { createdAt: 'desc' },
-        include: {
-          sucursal: true,
-          userRoles: {
-            include: {
-              role: true,
-            },
-          },
-        },
+        include: userInclude,
       }),
     ]);
 
-    // Limpiar passwordHash de la respuesta
-    const sanitizedData = data.map(user => {
-      const { passwordHash, ...rest } = user;
-      return rest;
-    });
-
-    return buildPaginatedResponse(sanitizedData, total, page, limit);
+    const mapped = data.map((u) => mapUsuario(u));
+    return buildPaginatedResponse(mapped, total, page, limit);
   },
 
   async getById(id: string) {
     const user = await db.user.findUnique({
       where: { id },
-      include: {
-        sucursal: true,
-        userRoles: {
-          include: {
-            role: true,
-          },
-        },
-      },
+      include: userInclude,
     });
 
     if (!user || user.deletedAt) {
-      throw new AppError(ErrorCodes.NOT_FOUND, 'Usuario no encontrado', 404);
+      throw new AppError(ErrorCodes.USER_NOT_FOUND, 'Usuario no encontrado', 404);
     }
 
-    const { passwordHash, ...rest } = user;
-    return rest;
+    return mapUsuario(user);
   },
 
   async create(data: {
     username: string;
     email: string;
-    password: string;
+    password?: string;
     nombre: string;
     apellido: string;
+    telefono?: string;
     sucursalId: string;
     activo?: boolean;
     roles?: string[];
   }) {
-    // Validar duplicados
     const existingUser = await db.user.findFirst({
       where: {
-        OR: [
-          { username: data.username },
-          { email: data.email },
-        ],
+        OR: [{ username: data.username }, { email: data.email }],
         deletedAt: null,
       },
     });
 
     if (existingUser) {
       if (existingUser.username === data.username) {
-        throw new AppError(ErrorCodes.CONFLICT, `El username '${data.username}' ya está en uso`, 409);
+        throw new AppError(ErrorCodes.DUPLICATE_EMAIL, `El username '${data.username}' ya está en uso`, 409);
       }
-      throw new AppError(ErrorCodes.CONFLICT, `El email '${data.email}' ya está registrado`, 409);
+      throw new AppError(ErrorCodes.DUPLICATE_EMAIL, `El email '${data.email}' ya está registrado`, 409);
     }
 
-    // Validar sucursal
     const branch = await db.branch.findUnique({ where: { id: data.sucursalId } });
-    if (!branch) {
-      throw new AppError(ErrorCodes.BAD_REQUEST, 'Sucursal no válida', 400);
+    if (!branch || branch.deletedAt) {
+      throw new AppError(ErrorCodes.VALIDATION_ERROR, 'Sucursal no válida', 422);
     }
 
-    const hashedPassword = await hashPassword(data.password);
+    const roles = data.roles ?? [];
+    await validateRoleIds(roles);
 
-    return db.$transaction(async (tx) => {
+    const plainPassword = data.password ?? randomBytes(16).toString('hex');
+    const hashedPassword = await hashPassword(plainPassword);
+
+    const userId = await db.$transaction(async (tx) => {
       const user = await tx.user.create({
         data: {
           username: data.username,
@@ -125,37 +152,45 @@ export const userService = {
           passwordHash: hashedPassword,
           nombre: data.nombre,
           apellido: data.apellido,
+          telefono: data.telefono,
           sucursalId: data.sucursalId,
-          activo: data.activo,
+          activo: data.activo ?? true,
         },
       });
 
-      // Asignar roles si vienen en el request
-      if (data.roles && data.roles.length > 0) {
+      if (roles.length > 0) {
         await tx.userRole.createMany({
-          data: data.roles.map(roleId => ({
+          data: roles.map((roleId) => ({
             userId: user.id,
             roleId,
           })),
         });
       }
 
-      return user;
+      return user.id;
     });
+
+    return this.getById(userId);
   },
 
-  async update(id: string, data: Partial<{
-    username: string;
-    email: string;
-    password: string;
-    nombre: string;
-    apellido: string;
-    sucursalId: string;
-    activo: boolean;
-  }>) {
+  async update(
+    id: string,
+    data: Partial<{
+      username: string;
+      email: string;
+      password: string;
+      nombre: string;
+      apellido: string;
+      telefono: string | null;
+      avatar: string | null;
+      sucursalId: string;
+      activo: boolean;
+      roles: string[];
+    }>
+  ) {
     const user = await db.user.findUnique({ where: { id } });
     if (!user || user.deletedAt) {
-      throw new AppError(ErrorCodes.NOT_FOUND, 'Usuario no encontrado', 404);
+      throw new AppError(ErrorCodes.USER_NOT_FOUND, 'Usuario no encontrado', 404);
     }
 
     if (data.username || data.email) {
@@ -171,35 +206,60 @@ export const userService = {
       });
 
       if (existing) {
-        throw new AppError(ErrorCodes.CONFLICT, 'Username o email ya en uso', 409);
+        throw new AppError(ErrorCodes.DUPLICATE_EMAIL, 'Username o email ya en uso', 409);
       }
     }
 
-    const updateData: any = { ...data };
-    if (data.password) {
-      updateData.passwordHash = await hashPassword(data.password);
-      delete updateData.password;
+    if (data.roles !== undefined) {
+      await validateRoleIds(data.roles);
     }
 
-    const updatedUser = await db.user.update({
-      where: { id },
-      data: updateData,
+    if (data.sucursalId) {
+      const branch = await db.branch.findUnique({ where: { id: data.sucursalId } });
+      if (!branch || branch.deletedAt) {
+        throw new AppError(ErrorCodes.VALIDATION_ERROR, 'Sucursal no válida', 422);
+      }
+    }
+
+    await db.$transaction(async (tx) => {
+      const { roles, password, ...rest } = data;
+      const updateData: Record<string, unknown> = { ...rest };
+      if (password) {
+        updateData.passwordHash = await hashPassword(password);
+      }
+
+      if (Object.keys(updateData).length > 0) {
+        await tx.user.update({
+          where: { id },
+          data: updateData as Prisma.UserUpdateInput,
+        });
+      }
+
+      if (roles !== undefined) {
+        await tx.userRole.deleteMany({ where: { userId: id } });
+        if (roles.length > 0) {
+          await tx.userRole.createMany({
+            data: roles.map((roleId) => ({
+              userId: id,
+              roleId,
+            })),
+          });
+        }
+      }
     });
 
-    const { passwordHash, ...rest } = updatedUser;
-    return rest;
+    return this.getById(id);
   },
 
   async delete(id: string) {
     const user = await db.user.findUnique({ where: { id } });
     if (!user) {
-      throw new AppError(ErrorCodes.NOT_FOUND, 'Usuario no encontrado', 404);
+      throw new AppError(ErrorCodes.USER_NOT_FOUND, 'Usuario no encontrado', 404);
     }
 
-    return db.user.update({
+    await db.user.update({
       where: { id },
       data: { deletedAt: new Date(), activo: false },
     });
   },
 };
-

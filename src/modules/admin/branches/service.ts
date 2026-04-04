@@ -2,11 +2,20 @@ import { db } from '../../../lib/db.js';
 import { AppError, ErrorCodes } from '../../../lib/errors.js';
 import { PaginationParams, buildPaginatedResponse } from '../../../lib/pagination.js';
 import { Prisma } from '@prisma/client';
+import { mapSucursal } from '../mapper.js';
+
+const branchListInclude = {
+  _count: {
+    select: {
+      users: { where: { deletedAt: null } },
+    },
+  },
+} as const;
 
 export const branchService = {
   async list(params: PaginationParams & { search?: string; activa?: boolean }) {
     const page = Number(params.page) || 1;
-    const limit = Number(params.limit) || 10;
+    const limit = Number(params.pageSize) || 10;
     const skip = (page - 1) * limit;
 
     const where: Prisma.BranchWhereInput = {
@@ -14,10 +23,11 @@ export const branchService = {
     };
 
     if (params.search) {
+      const q = params.search;
       where.OR = [
-        { nombre: { contains: params.search, mode: 'insensitive' } },
-        { codigo: { contains: params.search, mode: 'insensitive' } },
-        { direccion: { contains: params.search, mode: 'insensitive' } },
+        { nombre: { contains: q, mode: 'insensitive' } },
+        { codigo: { contains: q, mode: 'insensitive' } },
+        { direccion: { contains: q, mode: 'insensitive' } },
       ];
     }
 
@@ -34,22 +44,25 @@ export const branchService = {
         orderBy: params.sortBy
           ? { [params.sortBy]: params.sortDir || 'asc' }
           : { createdAt: 'desc' },
+        include: branchListInclude,
       }),
     ]);
 
-    return buildPaginatedResponse(data, total, page, limit);
+    const mapped = data.map((b) => mapSucursal(b));
+    return buildPaginatedResponse(mapped, total, page, limit);
   },
 
   async getById(id: string) {
     const branch = await db.branch.findUnique({
       where: { id },
+      include: branchListInclude,
     });
 
     if (!branch || branch.deletedAt) {
-      throw new AppError(ErrorCodes.NOT_FOUND, 'Sucursal no encontrada', 404);
+      throw new AppError(ErrorCodes.BRANCH_NOT_FOUND, 'Sucursal no encontrada', 404);
     }
 
-    return branch;
+    return mapSucursal(branch);
   },
 
   async create(data: {
@@ -57,54 +70,78 @@ export const branchService = {
     nombre: string;
     direccion: string;
     telefono?: string;
+    email?: string;
     activa: boolean;
+    configuracion: Record<string, unknown>;
   }) {
-    // Validar código único
-    const existingCode = await db.branch.findUnique({
-      where: { codigo: data.codigo },
+    const existingCode = await db.branch.findFirst({
+      where: { codigo: data.codigo, deletedAt: null },
     });
 
     if (existingCode) {
-      throw new AppError(ErrorCodes.CONFLICT, `Ya existe una sucursal con el código ${data.codigo}`, 409);
+      throw new AppError(ErrorCodes.DUPLICATE_CODE, `Ya existe una sucursal con el código ${data.codigo}`, 409);
     }
 
-    return db.branch.create({
-      data,
+    const row = await db.branch.create({
+      data: {
+        codigo: data.codigo,
+        nombre: data.nombre,
+        direccion: data.direccion,
+        telefono: data.telefono,
+        email: data.email,
+        activa: data.activa,
+        configuracion: data.configuracion as Prisma.InputJsonValue,
+      },
+      include: branchListInclude,
     });
+
+    return mapSucursal(row);
   },
 
-  async update(id: string, data: Partial<{
-    codigo: string;
-    nombre: string;
-    direccion: string;
-    telefono?: string;
-    activa: boolean;
-  }>) {
-    const branch = await this.getById(id);
+  async update(
+    id: string,
+    data: Partial<{
+      codigo: string;
+      nombre: string;
+      direccion: string;
+      telefono: string | null;
+      email: string | null;
+      activa: boolean;
+      configuracion: Record<string, unknown>;
+    }>
+  ) {
+    const branch = await db.branch.findUnique({ where: { id } });
+    if (!branch || branch.deletedAt) {
+      throw new AppError(ErrorCodes.BRANCH_NOT_FOUND, 'Sucursal no encontrada', 404);
+    }
 
     if (data.codigo && data.codigo !== branch.codigo) {
-      const existingCode = await db.branch.findUnique({
-        where: { codigo: data.codigo },
+      const existingCode = await db.branch.findFirst({
+        where: { codigo: data.codigo, deletedAt: null, NOT: { id } },
       });
 
       if (existingCode) {
-        throw new AppError(ErrorCodes.CONFLICT, `Ya existe una sucursal con el código ${data.codigo}`, 409);
+        throw new AppError(ErrorCodes.DUPLICATE_CODE, `Ya existe una sucursal con el código ${data.codigo}`, 409);
       }
     }
 
-    return db.branch.update({
+    const { configuracion, ...rest } = data;
+    const row = await db.branch.update({
       where: { id },
-      data,
+      data: {
+        ...rest,
+        ...(configuracion !== undefined
+          ? { configuracion: configuracion as Prisma.InputJsonValue }
+          : {}),
+      },
+      include: branchListInclude,
     });
+
+    return mapSucursal(row);
   },
 
   async delete(id: string) {
-    const branch = await this.getById(id);
-
-    // Validar si tiene dependencias (Stock, Órdenes, etc.)
-    // Esto es opcional, el soft delete permite mantener integridad referencial
-    // pero si quisiéramos ser estrictos podríamos verificarlo.
-    // Por ahora, procedemos con el soft delete.
+    await this.getById(id);
 
     return db.branch.update({
       where: { id },
@@ -112,4 +149,3 @@ export const branchService = {
     });
   },
 };
-

@@ -27,15 +27,19 @@ usersRouter.get(
     if (query.limit) queryRecord.limit = query.limit;
     if (query.sortBy) queryRecord.sortBy = query.sortBy;
     if (query.sortDir) queryRecord.sortDir = query.sortDir;
-    if (query.search) queryRecord.search = query.search;
+    const busqueda = query.busqueda ?? query.search;
+    if (busqueda) queryRecord.search = busqueda;
 
     const pagination = parsePagination(queryRecord);
     const filters = {
       sucursalId: query.sucursalId,
+      rolId: query.rolId,
       activo: query.activo === 'true' ? true : query.activo === 'false' ? false : undefined,
+      fechaCreacionDesde: query.fechaCreacionDesde,
+      fechaCreacionHasta: query.fechaCreacionHasta,
     };
 
-    const result = await userService.list({ ...pagination, ...filters });
+    const result = await userService.list({ ...pagination, ...filters, search: busqueda });
     return ok(c, result);
   }
 );
@@ -48,8 +52,7 @@ usersRouter.post(
   async (c) => {
     const data = (c as any).get('validatedBody') as z.infer<typeof createUserDto>;
     const user = await userService.create(data);
-    const { passwordHash, ...safeUser } = user as any; 
-    return created(c, safeUser);
+    return created(c, user);
   }
 );
 

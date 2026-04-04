@@ -112,6 +112,26 @@ components:
       schema:
         type: string
         format: date-time
+    busqueda:
+      name: busqueda
+      in: query
+      description: Búsqueda de texto (alias de `search`, contrato panel admin)
+      schema:
+        type: string
+    fechaCreacionDesde:
+      name: fechaCreacionDesde
+      in: query
+      description: Filtrar usuarios creados desde (ISO 8601)
+      schema:
+        type: string
+        format: date-time
+    fechaCreacionHasta:
+      name: fechaCreacionHasta
+      in: query
+      description: Filtrar usuarios creados hasta (ISO 8601)
+      schema:
+        type: string
+        format: date-time
 
   responses:
     Error422:
@@ -515,6 +535,746 @@ components:
         estado:
           type: string
 
+    Customer:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        nombre:
+          type: string
+        apellido:
+          type: string
+        email:
+          type: string
+        telefono:
+          type: string
+        rut:
+          type: string
+        direccion:
+          type: object
+        estado:
+          type: string
+        fechaRegistro:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        fechaUltimaCompra:
+          type: string
+          format: date-time
+          nullable: true
+          description: Fecha de la última compra del cliente (vacío si no tiene compras)
+        montoUltimaCompra:
+          type: integer
+          format: int64
+          nullable: true
+          description: Monto total en CLP de la última compra (vacío si no tiene compras)
+
+    # --- RRHH (alineado con API_RRHH_CONSUMIDA_POR_FRONTEND.md y backend) ---
+    RrhhApiEnvelope:
+      type: object
+      required: [success, message, timestamp, data]
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: OK
+        timestamp:
+          type: string
+          format: date-time
+        data:
+          description: Cuerpo según endpoint (objeto, lista o paginado)
+
+    RrhhDeleteEnvelope:
+      type: object
+      required: [success, message, timestamp]
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: Empleado eliminado
+        timestamp:
+          type: string
+          format: date-time
+
+    RrhhPagination:
+      type: object
+      required: [page, limit, total, totalPages]
+      properties:
+        page:
+          type: integer
+          minimum: 1
+        limit:
+          type: integer
+        total:
+          type: integer
+        totalPages:
+          type: integer
+        hasNext:
+          type: boolean
+        hasPrev:
+          type: boolean
+
+    RrhhDireccion:
+      type: object
+      properties:
+        calle: { type: string }
+        numero: { type: string }
+        comuna: { type: string }
+        region: { type: string }
+        codigoPostal:
+          type: string
+          nullable: true
+
+    RrhhDatosBancarios:
+      type: object
+      properties:
+        banco: { type: string }
+        tipoCuenta: { type: string }
+        numeroCuenta: { type: string }
+        rutTitular: { type: string }
+
+    RrhhPrevisional:
+      type: object
+      properties:
+        afp: { type: string }
+        salud: { type: string }
+        isapre: { type: string, nullable: true }
+        mutual: { type: boolean, nullable: true }
+        afc: { type: boolean, nullable: true }
+        porcentajeAFC: { type: number, format: float, nullable: true }
+
+    RrhhCargo:
+      type: object
+      required: [id, nombre, departamento, nivelJerarquico, sueldoMinimo, sueldoMaximo]
+      properties:
+        id:
+          type: string
+          format: uuid
+        nombre: { type: string }
+        descripcion: { type: string }
+        departamento: { type: string }
+        nivelJerarquico: { type: integer }
+        sueldoMinimo: { type: integer }
+        sueldoMaximo: { type: integer }
+
+    RrhhContratoVigenteResumen:
+      type: object
+      description: Contrato en estado vigente asociado al empleado (máx. uno)
+      required: [id, tipo, jornada, sueldoBase, estado, fechaInicio]
+      properties:
+        id:
+          type: string
+          format: uuid
+        tipo: { type: string, description: Tipo de contrato (ej. indefinido, plazo fijo) }
+        jornada: { type: string }
+        sueldoBase:
+          type: integer
+          description: Sueldo base en CLP del contrato vigente
+        estado:
+          $ref: '#/components/schemas/RrhhContractStatus'
+        fechaInicio: { type: string, format: date }
+        fechaFin:
+          type: string
+          format: date
+          nullable: true
+
+    RrhhEmpleado:
+      type: object
+      required:
+        - id
+        - rut
+        - nombre
+        - apellidoPaterno
+        - apellidoMaterno
+        - email
+        - fechaNacimiento
+        - fechaIngreso
+        - estado
+        - fechaCreacion
+        - fechaActualizacion
+      properties:
+        id:
+          type: string
+          format: uuid
+        rut:
+          type: string
+          description: 'RUT formateado (ej. 12.345.678-9)'
+        nombre: { type: string }
+        apellidoPaterno: { type: string }
+        apellidoMaterno: { type: string }
+        email: { type: string, format: email }
+        telefono: { type: string, nullable: true }
+        fechaNacimiento: { type: string, format: date }
+        fechaIngreso: { type: string, format: date }
+        estado:
+          type: string
+          enum: [activo, inactivo, suspendido, licencia]
+        direccion:
+          $ref: '#/components/schemas/RrhhDireccion'
+          nullable: true
+        cargo:
+          $ref: '#/components/schemas/RrhhCargo'
+          nullable: true
+        datosBancarios:
+          $ref: '#/components/schemas/RrhhDatosBancarios'
+          nullable: true
+        previsional:
+          $ref: '#/components/schemas/RrhhPrevisional'
+          nullable: true
+        contratoVigente:
+          $ref: '#/components/schemas/RrhhContratoVigenteResumen'
+          nullable: true
+          description: Datos del contrato activo (vigente); null si no tiene
+        fechaCreacion: { type: string, format: date-time }
+        fechaActualizacion: { type: string, format: date-time }
+
+    RrhhCrearEmpleado:
+      type: object
+      required: [rut, nombre, apellidoPaterno, apellidoMaterno, email, fechaNacimiento]
+      properties:
+        rut: { type: string }
+        nombre: { type: string }
+        apellidoPaterno: { type: string }
+        apellidoMaterno: { type: string }
+        email: { type: string, format: email }
+        telefono: { type: string }
+        fechaNacimiento: { type: string, format: date }
+        direccion:
+          $ref: '#/components/schemas/RrhhDireccion'
+        cargoId:
+          type: string
+          format: uuid
+        datosBancarios:
+          $ref: '#/components/schemas/RrhhDatosBancarios'
+        previsional:
+          $ref: '#/components/schemas/RrhhPrevisional'
+
+    RrhhActualizarEmpleado:
+      type: object
+      properties:
+        email: { type: string, format: email }
+        telefono: { type: string }
+        estado:
+          type: string
+          enum: [activo, inactivo, suspendido, licencia]
+        cargoId:
+          type: string
+          format: uuid
+          nullable: true
+        direccion:
+          $ref: '#/components/schemas/RrhhDireccion'
+        datosBancarios:
+          $ref: '#/components/schemas/RrhhDatosBancarios'
+        previsional:
+          $ref: '#/components/schemas/RrhhPrevisional'
+
+    RrhhEstadisticas:
+      type: object
+      required:
+        - totalEmpleados
+        - empleadosActivos
+        - empleadosInactivos
+        - contratosVigentes
+        - contratosPorTerminar
+        - costoNominaTotal
+        - promedioSueldo
+        - rotacionPersonal
+      properties:
+        totalEmpleados: { type: integer }
+        empleadosActivos: { type: integer }
+        empleadosInactivos: { type: integer }
+        contratosVigentes: { type: integer }
+        contratosPorTerminar: { type: integer }
+        costoNominaTotal: { type: integer, description: Montos en CLP (enteros) }
+        promedioSueldo: { type: integer }
+        rotacionPersonal: { type: number, format: float }
+
+    RrhhContractStatus:
+      type: string
+      enum: [vigente, respaldo, terminado, suspendido]
+
+    RrhhContrato:
+      type: object
+      required:
+        - id
+        - empleadoId
+        - empleado
+        - numeroContrato
+        - tipo
+        - jornada
+        - sueldoBase
+        - fechaInicio
+        - estado
+        - observaciones
+        - fechaCreacion
+        - fechaActualizacion
+      properties:
+        id: { type: string, format: uuid }
+        empleadoId: { type: string, format: uuid }
+        empleado:
+          $ref: '#/components/schemas/RrhhEmpleado'
+        numeroContrato: { type: string }
+        tipo: { type: string }
+        jornada: { type: string }
+        sueldoBase: { type: integer }
+        fechaInicio: { type: string, format: date }
+        fechaFin:
+          type: string
+          format: date
+          nullable: true
+        estado:
+          $ref: '#/components/schemas/RrhhContractStatus'
+        observaciones: { type: string }
+        fechaCreacion: { type: string, format: date-time }
+        fechaActualizacion: { type: string, format: date-time }
+
+    RrhhCrearContrato:
+      type: object
+      required: [empleadoId, tipo, sueldoBase, fechaInicio]
+      properties:
+        empleadoId: { type: string, format: uuid }
+        tipo: { type: string }
+        jornada: { type: string }
+        sueldoBase: { type: integer, minimum: 1 }
+        fechaInicio: { type: string, format: date }
+        fechaFin:
+          type: string
+          format: date
+          nullable: true
+        observaciones: { type: string }
+
+    RrhhActualizarContrato:
+      type: object
+      properties:
+        sueldoBase: { type: integer, minimum: 1 }
+        observaciones: { type: string }
+        jornada: { type: string }
+        tipo: { type: string }
+        fechaFin:
+          type: string
+          format: date
+          nullable: true
+
+    RrhhTerminarContrato:
+      type: object
+      required: [fechaTermino]
+      properties:
+        fechaTermino: { type: string, format: date }
+        observaciones: { type: string }
+
+    RrhhPayrollStatus:
+      type: string
+      enum: [pendiente, procesada, pagada, cancelada]
+
+    RrhhPayrollEarning:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        tipo: { type: string }
+        descripcion: { type: string }
+        monto: { type: integer }
+        esImponible: { type: boolean }
+        esTributable: { type: boolean }
+
+    RrhhPayrollDeduction:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        tipo: { type: string }
+        descripcion: { type: string }
+        porcentaje: { type: number, format: float, nullable: true }
+        monto: { type: integer }
+        esLegal: { type: boolean }
+        esVoluntario: { type: boolean }
+
+    RrhhPayrollImposicionLine:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        tipo: { type: string }
+        descripcion: { type: string }
+        porcentaje: { type: number, format: float, nullable: true }
+        baseImponible: { type: integer }
+        monto: { type: integer }
+        esObligatoria: { type: boolean }
+
+    RrhhNomina:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        periodo:
+          type: string
+          pattern: '^\\d{4}-\\d{2}$'
+        empleadoId: { type: string, format: uuid }
+        empleado:
+          $ref: '#/components/schemas/RrhhEmpleado'
+        contratoId:
+          type: string
+          format: uuid
+          nullable: true
+        contrato:
+          $ref: '#/components/schemas/RrhhContrato'
+          nullable: true
+        fechaGeneracion:
+          type: string
+          format: date
+          nullable: true
+        fechaPago:
+          type: string
+          format: date
+          nullable: true
+        estado:
+          $ref: '#/components/schemas/RrhhPayrollStatus'
+        haberes:
+          type: array
+          items:
+            $ref: '#/components/schemas/RrhhPayrollEarning'
+        descuentos:
+          type: array
+          items:
+            $ref: '#/components/schemas/RrhhPayrollDeduction'
+        imposiciones:
+          type: array
+          items:
+            $ref: '#/components/schemas/RrhhPayrollImposicionLine'
+        totalHaberes: { type: integer }
+        totalDescuentos: { type: integer }
+        totalImposiciones: { type: integer }
+        liquido: { type: integer }
+        observaciones: { type: string }
+
+    RrhhGenerarNomina:
+      type: object
+      required: [periodo]
+      properties:
+        periodo:
+          type: string
+          pattern: '^\\d{4}-\\d{2}$'
+        empleadoIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+        incluirTodos: { type: boolean }
+
+    RrhhProcesarNomina:
+      type: object
+      required: [nominaId, fechaPago]
+      properties:
+        nominaId: { type: string, format: uuid }
+        fechaPago: { type: string, format: date }
+        observaciones: { type: string }
+
+    RrhhCalcularNomina:
+      type: object
+      required: [empleadoId, periodo]
+      properties:
+        empleadoId: { type: string, format: uuid }
+        periodo:
+          type: string
+          pattern: '^\\d{4}-\\d{2}$'
+
+    RrhhCalculoNomina:
+      type: object
+      properties:
+        sueldoBase: { type: integer }
+        horasExtra: { type: integer }
+        gratificacion: { type: integer }
+        otrosHaberes: { type: integer }
+        totalHaberes: { type: integer }
+        descuentosAFP: { type: integer }
+        descuentosSalud: { type: integer }
+        descuentosAFC: { type: integer }
+        descuentosMutual: { type: integer }
+        impuestos: { type: integer }
+        otrosDescuentos: { type: integer }
+        totalDescuentos: { type: integer }
+        liquido: { type: integer }
+
+    RrhhResumenNomina:
+      type: object
+      properties:
+        periodo:
+          type: string
+          pattern: '^\\d{4}-\\d{2}$'
+        totalEmpleados: { type: integer }
+        totalHaberes: { type: integer }
+        totalDescuentos: { type: integer }
+        totalImposiciones: { type: integer }
+        totalLiquido: { type: integer }
+        empleadosPagados: { type: integer }
+        empleadosPendientes: { type: integer }
+
+    RrhhExportarNomina:
+      type: object
+      required: [periodo, formato]
+      properties:
+        periodo:
+          type: string
+          pattern: '^\\d{4}-\\d{2}$'
+        formato:
+          type: string
+          enum: [csv, xlsx]
+        incluirDetalle: { type: boolean }
+        incluirImposiciones: { type: boolean }
+
+    RrhhImposicionResumen:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        periodo:
+          type: string
+          pattern: '^\\d{4}-\\d{2}$'
+        empleadoId: { type: string, format: uuid }
+        empleado:
+          $ref: '#/components/schemas/RrhhEmpleado'
+        afp:
+          type: object
+          additionalProperties: true
+        salud:
+          type: object
+          additionalProperties: true
+        afc:
+          type: object
+          additionalProperties: true
+        mutual:
+          type: object
+          additionalProperties: true
+        totalImposiciones: { type: integer }
+        fechaGeneracion: { type: string, format: date }
+
+    RrhhGenerarImposiciones:
+      type: object
+      required: [periodo]
+      properties:
+        periodo:
+          type: string
+          pattern: '^\\d{4}-\\d{2}$'
+        empleadoIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+
+    RrhhExportarImposiciones:
+      type: object
+      required: [periodo, formato, tipo]
+      properties:
+        periodo:
+          type: string
+          pattern: '^\\d{4}-\\d{2}$'
+        formato:
+          type: string
+          enum: [csv, excel]
+        tipo:
+          type: string
+          enum: [todos, afp, salud]
+
+    RrhhParametrosCalculo:
+      type: object
+      required:
+        - porcentajeAFP
+        - porcentajeSalud
+        - porcentajeAFC
+        - porcentajeMutual
+        - tramoImpuesto
+        - porcentajeImpuesto
+        - rebajaImpuesto
+      properties:
+        porcentajeAFP: { type: number, format: float }
+        porcentajeSalud: { type: number, format: float }
+        porcentajeAFC: { type: number, format: float }
+        porcentajeMutual: { type: number, format: float }
+        tramoImpuesto: { type: string }
+        porcentajeImpuesto: { type: number, format: float }
+        rebajaImpuesto: { type: integer }
+
+    RrhhEnvelopeEmpleadosPaginados:
+      allOf:
+        - $ref: '#/components/schemas/RrhhApiEnvelope'
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [data, pagination]
+              properties:
+                data:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/RrhhEmpleado'
+                pagination:
+                  $ref: '#/components/schemas/RrhhPagination'
+
+    RrhhEnvelopeContratosPaginados:
+      allOf:
+        - $ref: '#/components/schemas/RrhhApiEnvelope'
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [data, pagination]
+              properties:
+                data:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/RrhhContrato'
+                pagination:
+                  $ref: '#/components/schemas/RrhhPagination'
+
+    RrhhEnvelopeNominaPaginados:
+      allOf:
+        - $ref: '#/components/schemas/RrhhApiEnvelope'
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [data, pagination]
+              properties:
+                data:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/RrhhNomina'
+                pagination:
+                  $ref: '#/components/schemas/RrhhPagination'
+
+    RrhhEnvelopeImposicionesPaginados:
+      allOf:
+        - $ref: '#/components/schemas/RrhhApiEnvelope'
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [data, pagination]
+              properties:
+                data:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/RrhhImposicionResumen'
+                pagination:
+                  $ref: '#/components/schemas/RrhhPagination'
+
+    RrhhEnvelopeEmpleado:
+      allOf:
+        - $ref: '#/components/schemas/RrhhApiEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/RrhhEmpleado'
+
+    RrhhEnvelopeEstadisticas:
+      allOf:
+        - $ref: '#/components/schemas/RrhhApiEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/RrhhEstadisticas'
+
+    RrhhEnvelopeContrato:
+      allOf:
+        - $ref: '#/components/schemas/RrhhApiEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/RrhhContrato'
+
+    RrhhEnvelopeContratosLista:
+      allOf:
+        - $ref: '#/components/schemas/RrhhApiEnvelope'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/RrhhContrato'
+
+    RrhhEnvelopeNomina:
+      allOf:
+        - $ref: '#/components/schemas/RrhhApiEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/RrhhNomina'
+
+    RrhhEnvelopeNominaLista:
+      allOf:
+        - $ref: '#/components/schemas/RrhhApiEnvelope'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/RrhhNomina'
+
+    RrhhEnvelopeCalculoNomina:
+      allOf:
+        - $ref: '#/components/schemas/RrhhApiEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/RrhhCalculoNomina'
+
+    RrhhEnvelopeResumenNomina:
+      allOf:
+        - $ref: '#/components/schemas/RrhhApiEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/RrhhResumenNomina'
+
+    RrhhEnvelopeImposicion:
+      allOf:
+        - $ref: '#/components/schemas/RrhhApiEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/RrhhImposicionResumen'
+
+    RrhhEnvelopeImposicionesLista:
+      allOf:
+        - $ref: '#/components/schemas/RrhhApiEnvelope'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/RrhhImposicionResumen'
+
+    RrhhEnvelopeCargosLista:
+      allOf:
+        - $ref: '#/components/schemas/RrhhApiEnvelope'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/RrhhCargo'
+
+    RrhhEnvelopeCargo:
+      allOf:
+        - $ref: '#/components/schemas/RrhhApiEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/RrhhCargo'
+
+    RrhhEnvelopeParametros:
+      allOf:
+        - $ref: '#/components/schemas/RrhhApiEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/RrhhParametrosCalculo'
+
     # Productos
     Product:
       type: object
@@ -682,6 +1442,294 @@ components:
           format: uri
         sku:
           type: string
+
+    # --- Admin (panel /api/admin) — formas expuestas al frontend ---
+    AdminPermiso:
+      type: object
+      required: [id, recurso, accion, descripcion, categoria]
+      properties:
+        id:
+          type: string
+          description: Identificador estable del permiso (nombre único en catálogo)
+        recurso:
+          type: string
+        accion:
+          type: string
+        descripcion:
+          type: string
+        categoria:
+          type: string
+
+    AdminRolCompact:
+      type: object
+      required: [id, nombre, activo, fechaCreacion, permisos]
+      properties:
+        id:
+          type: string
+        nombre:
+          type: string
+        descripcion:
+          type: string
+          nullable: true
+        activo:
+          type: boolean
+        fechaCreacion:
+          type: string
+          format: date-time
+        permisos:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminPermiso'
+
+    AdminRol:
+      allOf:
+        - $ref: '#/components/schemas/AdminRolCompact'
+        - type: object
+          properties:
+            usuariosCount:
+              type: integer
+              description: Presente en listados y detalle de rol
+
+    AdminConfiguracionSucursal:
+      type: object
+      additionalProperties: true
+      description: JSON de configuración de sucursal (moneda, formatos, etc.)
+
+    AdminSucursal:
+      type: object
+      required: [id, codigo, nombre, activa, configuracion, fechaCreacion]
+      properties:
+        id:
+          type: string
+        codigo:
+          type: string
+        nombre:
+          type: string
+        direccion:
+          type: string
+          nullable: true
+        telefono:
+          type: string
+          nullable: true
+        email:
+          type: string
+          nullable: true
+        activa:
+          type: boolean
+        configuracion:
+          $ref: '#/components/schemas/AdminConfiguracionSucursal'
+        fechaCreacion:
+          type: string
+          format: date-time
+        usuariosCount:
+          type: integer
+          description: Opcional según endpoint
+
+    AdminUsuario:
+      type: object
+      required:
+        - id
+        - username
+        - email
+        - nombre
+        - apellido
+        - activo
+        - fechaCreacion
+        - roles
+        - sucursalId
+      properties:
+        id:
+          type: string
+        username:
+          type: string
+        email:
+          type: string
+        nombre:
+          type: string
+        apellido:
+          type: string
+        telefono:
+          type: string
+          nullable: true
+        avatar:
+          type: string
+          nullable: true
+        activo:
+          type: boolean
+        fechaCreacion:
+          type: string
+          format: date-time
+        ultimoAcceso:
+          type: string
+          format: date-time
+          nullable: true
+        roles:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminRolCompact'
+        sucursalId:
+          type: string
+          nullable: true
+        sucursal:
+          oneOf:
+            - $ref: '#/components/schemas/AdminSucursal'
+            - type: 'null'
+
+    AdminConfiguracionSistema:
+      type: object
+      required: [id, nombre, descripcion, valor, tipo, categoria, editable, fechaActualizacion]
+      properties:
+        id:
+          type: string
+        nombre:
+          type: string
+          description: Alias de `clave` en BD
+        descripcion:
+          type: string
+        valor:
+          type: string
+        tipo:
+          type: string
+        categoria:
+          type: string
+        editable:
+          type: boolean
+        fechaActualizacion:
+          type: string
+          format: date-time
+
+    AdminPagination:
+      type: object
+      required: [page, limit, total, totalPages, hasNext, hasPrev]
+      properties:
+        page:
+          type: integer
+        limit:
+          type: integer
+        total:
+          type: integer
+        totalPages:
+          type: integer
+        hasNext:
+          type: boolean
+        hasPrev:
+          type: boolean
+
+    AdminPaginatedUsuarios:
+      type: object
+      required: [data, pagination]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminUsuario'
+        pagination:
+          $ref: '#/components/schemas/AdminPagination'
+
+    AdminPaginatedRoles:
+      type: object
+      required: [data, pagination]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminRol'
+        pagination:
+          $ref: '#/components/schemas/AdminPagination'
+
+    AdminPaginatedSucursales:
+      type: object
+      required: [data, pagination]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminSucursal'
+        pagination:
+          $ref: '#/components/schemas/AdminPagination'
+
+    AdminPaginatedSettings:
+      type: object
+      required: [data, pagination]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminConfiguracionSistema'
+        pagination:
+          $ref: '#/components/schemas/AdminPagination'
+
+    AdminPermisosCatalogoOLista:
+      description: Sin `page`/`limit` devuelve array plano; con paginación, objeto con data y pagination
+      oneOf:
+        - type: array
+          items:
+            $ref: '#/components/schemas/AdminPermiso'
+        - $ref: '#/components/schemas/AdminPaginatedPermisos'
+
+    AdminPaginatedPermisos:
+      type: object
+      required: [data, pagination]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminPermiso'
+        pagination:
+          $ref: '#/components/schemas/AdminPagination'
+
+    EstadisticasAdmin:
+      type: object
+      required:
+        - totalUsuarios
+        - usuariosActivos
+        - totalRoles
+        - rolesActivos
+        - totalSucursales
+        - sucursalesActivas
+        - totalConfiguraciones
+        - ultimosUsuarios
+        - rolesMasUsados
+        - distribucionUsuariosPorSucursal
+      properties:
+        totalUsuarios:
+          type: integer
+        usuariosActivos:
+          type: integer
+        totalRoles:
+          type: integer
+        rolesActivos:
+          type: integer
+        totalSucursales:
+          type: integer
+        sucursalesActivas:
+          type: integer
+        totalConfiguraciones:
+          type: integer
+        ultimosUsuarios:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminUsuario'
+        rolesMasUsados:
+          type: array
+          items:
+            type: object
+            required: [rol, count]
+            properties:
+              count:
+                type: integer
+              rol:
+                $ref: '#/components/schemas/AdminRolCompact'
+        distribucionUsuariosPorSucursal:
+          type: array
+          items:
+            type: object
+            required: [sucursal, count]
+            properties:
+              count:
+                type: integer
+              sucursal:
+                $ref: '#/components/schemas/AdminSucursal'
 
 paths:
   # PRODUCTOS
@@ -1810,7 +2858,18 @@ paths:
             type: string
       responses:
         '200':
-          description: Lista de clientes
+          description: Lista de clientes (incluye fecha y monto de última compra cuando aplica)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Customer'
     post:
       tags: [customers]
       summary: Crear cliente
@@ -2320,19 +3379,43 @@ paths:
         '200':
           description: Estadísticas del período
 
-  # RRHH - EMPLEADOS
+  # RRHH — alineado con src/modules/hr/router.ts (GET auth opcional; mutaciones con JWT + RBAC)
+  /hr/employees/estadisticas:
+    get:
+      tags: [rrhh]
+      summary: Estadísticas globales RRHH
+      description: |
+        Autenticación opcional. Respuesta con envelope `success`, `message`, `timestamp`, `data`.
+      security: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RrhhEnvelopeEstadisticas'
+
   /hr/employees:
     get:
       tags: [rrhh]
-      summary: Listar empleados
+      summary: Listar empleados (paginado)
+      description: |
+        Filtros opcionales. Búsqueda de texto libre con query `busqueda` (no `search`).
+        Autenticación opcional.
+      security: []
       parameters:
         - $ref: '#/components/parameters/page'
         - $ref: '#/components/parameters/pageSize'
-        - $ref: '#/components/parameters/search'
+        - name: busqueda
+          in: query
+          description: Texto libre (nombre, RUT, email, etc.)
+          schema:
+            type: string
         - name: estado
           in: query
           schema:
             type: string
+            enum: [activo, inactivo, suspendido, licencia]
         - name: cargo
           in: query
           schema:
@@ -2345,15 +3428,17 @@ paths:
           in: query
           schema:
             type: string
-            format: date
         - name: fechaIngresoHasta
           in: query
           schema:
             type: string
-            format: date
       responses:
         '200':
-          description: Lista de empleados
+          description: Lista paginada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RrhhEnvelopeEmpleadosPaginados'
     post:
       tags: [rrhh]
       summary: Crear empleado
@@ -2362,10 +3447,14 @@ paths:
         content:
           application/json:
             schema:
-              type: object
+              $ref: '#/components/schemas/RrhhCrearEmpleado'
       responses:
         '201':
-          description: Empleado creado
+          description: Creado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RrhhEnvelopeEmpleado'
         '422':
           $ref: '#/components/responses/Error422'
 
@@ -2373,15 +3462,21 @@ paths:
     get:
       tags: [rrhh]
       summary: Obtener empleado por ID
+      security: []
       parameters:
         - name: id
           in: path
           required: true
           schema:
             type: string
+            format: uuid
       responses:
         '200':
-          description: Empleado encontrado
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RrhhEnvelopeEmpleado'
         '404':
           $ref: '#/components/responses/NotFound'
     put:
@@ -2393,11 +3488,24 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RrhhActualizarEmpleado'
       responses:
         '200':
-          description: Empleado actualizado
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RrhhEnvelopeEmpleado'
         '404':
           $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Error422'
     delete:
       tags: [rrhh]
       summary: Eliminar empleado
@@ -2407,33 +3515,85 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
       responses:
         '200':
-          description: Empleado eliminado
+          description: Sin `data` en el cuerpo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RrhhDeleteEnvelope'
         '404':
           $ref: '#/components/responses/NotFound'
 
-  /hr/employees/estadisticas:
-    get:
+  # RRHH — CONTRATOS (un contrato vigente por empleado; al crear uno nuevo el anterior pasa a respaldo)
+  /hr/contracts/{id}/terminar:
+    put:
       tags: [rrhh]
-      summary: Estadísticas de empleados
+      summary: Terminar contrato
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RrhhTerminarContrato'
       responses:
         '200':
-          description: Estadísticas
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RrhhEnvelopeContrato'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Error422'
 
-  # RRHH - CONTRATOS
+  /hr/contracts/empleado/{empleadoId}:
+    get:
+      tags: [rrhh]
+      summary: Contratos de un empleado
+      security: []
+      parameters:
+        - name: empleadoId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Lista de contratos del empleado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RrhhEnvelopeContratosLista'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   /hr/contracts:
     get:
       tags: [rrhh]
-      summary: Listar contratos
+      summary: Listar contratos (paginado)
+      description: |
+        Búsqueda opcional con `search` o alias `q` (mismo efecto).
+        Autenticación opcional.
+      security: []
       parameters:
         - $ref: '#/components/parameters/page'
         - $ref: '#/components/parameters/pageSize'
-        - $ref: '#/components/parameters/search'
         - name: empleadoId
           in: query
           schema:
             type: string
+            format: uuid
         - name: tipo
           in: query
           schema:
@@ -2441,20 +3601,23 @@ paths:
         - name: estado
           in: query
           schema:
-            type: string
-        - name: fechaInicioDesde
+            $ref: '#/components/schemas/RrhhContractStatus'
+        - name: search
           in: query
           schema:
             type: string
-            format: date
-        - name: fechaInicioHasta
+        - name: q
           in: query
+          description: Alias de `search`
           schema:
             type: string
-            format: date
       responses:
         '200':
-          description: Lista de contratos
+          description: Lista paginada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RrhhEnvelopeContratosPaginados'
     post:
       tags: [rrhh]
       summary: Crear contrato
@@ -2463,10 +3626,14 @@ paths:
         content:
           application/json:
             schema:
-              type: object
+              $ref: '#/components/schemas/RrhhCrearContrato'
       responses:
         '201':
-          description: Contrato creado
+          description: Creado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RrhhEnvelopeContrato'
         '422':
           $ref: '#/components/responses/Error422'
 
@@ -2474,15 +3641,21 @@ paths:
     get:
       tags: [rrhh]
       summary: Obtener contrato por ID
+      security: []
       parameters:
         - name: id
           in: path
           required: true
           schema:
             type: string
+            format: uuid
       responses:
         '200':
-          description: Contrato encontrado
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RrhhEnvelopeContrato'
         '404':
           $ref: '#/components/responses/NotFound'
     put:
@@ -2494,405 +3667,372 @@ paths:
           required: true
           schema:
             type: string
-      responses:
-        '200':
-          description: Contrato actualizado
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-  /hr/contracts/empleado/{empleadoId}:
-    get:
-      tags: [rrhh]
-      summary: Contratos de un empleado
-      parameters:
-        - name: empleadoId
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Lista de contratos
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-  /hr/contracts/{id}/terminar:
-    put:
-      tags: [rrhh]
-      summary: Terminar contrato
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
+            format: uuid
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required:
-                - fechaTermino
-              properties:
-                fechaTermino:
-                  type: string
-                  format: date
-                observaciones:
-                  type: string
+              $ref: '#/components/schemas/RrhhActualizarContrato'
       responses:
         '200':
-          description: Contrato terminado
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RrhhEnvelopeContrato'
         '404':
           $ref: '#/components/responses/NotFound'
         '422':
           $ref: '#/components/responses/Error422'
 
-  # RRHH - NÓMINA
-  /hr/payroll:
+  # RRHH — NÓMINA (no existe POST /hr/payroll; la generación es POST /hr/payroll/generar)
+  /hr/payroll/resumen/{periodo}:
     get:
       tags: [rrhh]
-      summary: Listar nóminas
+      summary: Resumen agregado de nómina por período
+      security: []
       parameters:
-        - $ref: '#/components/parameters/page'
-        - $ref: '#/components/parameters/pageSize'
-        - $ref: '#/components/parameters/search'
         - name: periodo
-          in: query
-          schema:
-            type: string
-        - name: empleadoId
-          in: query
-          schema:
-            type: string
-        - name: estado
-          in: query
-          schema:
-            type: string
-        - name: fechaPagoDesde
-          in: query
-          schema:
-            type: string
-            format: date
-        - name: fechaPagoHasta
-          in: query
-          schema:
-            type: string
-            format: date
-      responses:
-        '200':
-          description: Lista de nóminas
-    post:
-      tags: [rrhh]
-      summary: Generar nóminas
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-      responses:
-        '201':
-          description: Nóminas generadas
-        '422':
-          $ref: '#/components/responses/Error422'
-
-  /hr/payroll/{id}:
-    get:
-      tags: [rrhh]
-      summary: Obtener nómina por ID
-      parameters:
-        - name: id
           in: path
           required: true
           schema:
             type: string
+            pattern: '^\\d{4}-\\d{2}$'
       responses:
         '200':
-          description: Nómina encontrada
-        '404':
-          $ref: '#/components/responses/NotFound'
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RrhhEnvelopeResumenNomina'
 
   /hr/payroll/periodo/{periodo}:
     get:
       tags: [rrhh]
-      summary: Nóminas por período
+      summary: Nóminas de un período (lista)
+      security: []
       parameters:
         - name: periodo
           in: path
           required: true
           schema:
             type: string
+            pattern: '^\\d{4}-\\d{2}$'
       responses:
         '200':
-          description: Lista de nóminas
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RrhhEnvelopeNominaLista'
 
   /hr/payroll/generar:
     post:
       tags: [rrhh]
-      summary: Generar nóminas para período
+      summary: Generar nóminas para un período
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required:
-                - periodo
-              properties:
-                periodo:
-                  type: string
-                empleadoIds:
-                  type: array
-                  items:
-                    type: string
-                incluirTodos:
-                  type: boolean
+              $ref: '#/components/schemas/RrhhGenerarNomina'
       responses:
         '201':
-          description: Nóminas generadas
-        '422':
-          $ref: '#/components/responses/Error422'
-
-  /hr/payroll/procesar:
-    put:
-      tags: [rrhh]
-      summary: Procesar nómina (marcar como pagada)
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - nominaId
-                - fechaPago
-              properties:
-                nominaId:
-                  type: string
-                fechaPago:
-                  type: string
-                  format: date
-                observaciones:
-                  type: string
-      responses:
-        '200':
-          description: Nómina procesada
+          description: Generadas
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RrhhEnvelopeNominaLista'
         '422':
           $ref: '#/components/responses/Error422'
 
   /hr/payroll/calcular:
     post:
       tags: [rrhh]
-      summary: Calcular nómina para empleado
+      summary: Calcular liquidación (preview) para un empleado y período
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required:
-                - empleadoId
-                - periodo
-              properties:
-                empleadoId:
-                  type: string
-                periodo:
-                  type: string
+              $ref: '#/components/schemas/RrhhCalcularNomina'
       responses:
         '200':
-          description: Cálculo de nómina
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RrhhEnvelopeCalculoNomina'
         '422':
           $ref: '#/components/responses/Error422'
 
-  /hr/payroll/resumen/{periodo}:
-    get:
+  /hr/payroll/procesar:
+    put:
       tags: [rrhh]
-      summary: Resumen de nómina por período
-      parameters:
-        - name: periodo
-          in: path
-          required: true
-          schema:
-            type: string
+      summary: Procesar nómina (marcar pago)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RrhhProcesarNomina'
       responses:
         '200':
-          description: Resumen de nómina
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RrhhEnvelopeNomina'
+        '422':
+          $ref: '#/components/responses/Error422'
 
   /hr/payroll/exportar:
     post:
       tags: [rrhh]
-      summary: Exportar nómina
+      summary: Exportar nómina a CSV
+      description: |
+        Respuesta binaria `text/csv` con `Content-Disposition` attachment. El backend actual solo genera CSV.
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
+              $ref: '#/components/schemas/RrhhExportarNomina'
       responses:
         '200':
-          description: Archivo exportado
+          description: Archivo CSV
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+              description: attachment; filename="nomina-YYYY-MM.csv"
           content:
-            application/octet-stream:
+            text/csv:
               schema:
                 type: string
                 format: binary
 
-  # RRHH - IMPOSICIONES
-  /hr/contributions:
+  /hr/payroll:
     get:
       tags: [rrhh]
-      summary: Listar imposiciones
+      summary: Listar nóminas (paginado)
+      security: []
       parameters:
         - $ref: '#/components/parameters/page'
         - $ref: '#/components/parameters/pageSize'
-        - $ref: '#/components/parameters/search'
         - name: periodo
           in: query
           schema:
             type: string
+            pattern: '^\\d{4}-\\d{2}$'
         - name: empleadoId
           in: query
           schema:
             type: string
-        - name: tipo
+            format: uuid
+        - name: estado
           in: query
           schema:
-            type: string
+            $ref: '#/components/schemas/RrhhPayrollStatus'
       responses:
         '200':
-          description: Lista de imposiciones
-    post:
-      tags: [rrhh]
-      summary: Generar imposiciones
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - periodo
-              properties:
-                periodo:
-                  type: string
-                empleadoIds:
-                  type: array
-                  items:
-                    type: string
-      responses:
-        '201':
-          description: Imposiciones generadas
-        '422':
-          $ref: '#/components/responses/Error422'
+          description: Lista paginada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RrhhEnvelopeNominaPaginados'
 
-  /hr/contributions/{id}:
+  /hr/payroll/{id}:
     get:
       tags: [rrhh]
-      summary: Obtener imposiciones por ID
+      summary: Obtener nómina por ID
+      security: []
       parameters:
         - name: id
           in: path
           required: true
           schema:
             type: string
+            format: uuid
       responses:
         '200':
-          description: Imposiciones encontradas
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RrhhEnvelopeNomina'
         '404':
           $ref: '#/components/responses/NotFound'
 
+  # RRHH — IMPOSICIONES (no existe POST /hr/contributions; la generación es POST /hr/contributions/generar)
   /hr/contributions/periodo/{periodo}:
     get:
       tags: [rrhh]
-      summary: Imposiciones por período
+      summary: Imposiciones de un período
+      security: []
       parameters:
         - name: periodo
           in: path
           required: true
           schema:
             type: string
+            pattern: '^\\d{4}-\\d{2}$'
       responses:
         '200':
-          description: Lista de imposiciones
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RrhhEnvelopeImposicionesLista'
 
   /hr/contributions/generar:
     post:
       tags: [rrhh]
-      summary: Generar imposiciones para período
+      summary: Generar resúmenes de imposiciones para un período
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required:
-                - periodo
-              properties:
-                periodo:
-                  type: string
-                empleadoIds:
-                  type: array
-                  items:
-                    type: string
+              $ref: '#/components/schemas/RrhhGenerarImposiciones'
       responses:
         '201':
-          description: Imposiciones generadas
+          description: Generadas
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RrhhEnvelopeImposicionesLista'
         '422':
           $ref: '#/components/responses/Error422'
 
   /hr/contributions/exportar:
     post:
       tags: [rrhh]
-      summary: Exportar imposiciones
+      summary: Exportar imposiciones a CSV
+      description: |
+        El backend actual exporta CSV con columnas del período. `formato`/`tipo` están en el DTO para compatibilidad futura.
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
+              $ref: '#/components/schemas/RrhhExportarImposiciones'
       responses:
         '200':
-          description: Archivo exportado
+          description: Archivo CSV
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+              description: attachment; filename="imposiciones-YYYY-MM.csv"
           content:
-            application/octet-stream:
+            text/csv:
               schema:
                 type: string
                 format: binary
 
-  # RRHH - CARGOS
-  /hr/positions:
+  /hr/contributions:
     get:
       tags: [rrhh]
-      summary: Listar cargos
+      summary: Listar resúmenes de imposiciones (paginado)
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/pageSize'
+        - name: periodo
+          in: query
+          schema:
+            type: string
+            pattern: '^\\d{4}-\\d{2}$'
+        - name: empleadoId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: tipo
+          in: query
+          schema:
+            type: string
       responses:
         '200':
-          description: Lista de cargos
+          description: Lista paginada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RrhhEnvelopeImposicionesPaginados'
 
-  /hr/positions/{id}:
+  /hr/contributions/{id}:
     get:
       tags: [rrhh]
-      summary: Obtener cargo por ID
+      summary: Obtener resumen de imposiciones por ID
+      security: []
       parameters:
         - name: id
           in: path
           required: true
           schema:
             type: string
+            format: uuid
       responses:
         '200':
-          description: Cargo encontrado
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RrhhEnvelopeImposicion'
         '404':
           $ref: '#/components/responses/NotFound'
 
-  # RRHH - PARÁMETROS
+  # RRHH — CARGOS
+  /hr/positions:
+    get:
+      tags: [rrhh]
+      summary: Listar cargos
+      security: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RrhhEnvelopeCargosLista'
+
+  /hr/positions/{id}:
+    get:
+      tags: [rrhh]
+      summary: Obtener cargo por ID
+      security: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RrhhEnvelopeCargo'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # RRHH — PARÁMETROS DE CÁLCULO (AFP, salud, etc.)
   /hr/parametros/calculo:
     get:
       tags: [rrhh]
       summary: Obtener parámetros de cálculo
+      security: []
       responses:
         '200':
-          description: Parámetros
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RrhhEnvelopeParametros'
     put:
       tags: [rrhh]
       summary: Actualizar parámetros de cálculo
@@ -2901,10 +4041,14 @@ paths:
         content:
           application/json:
             schema:
-              type: object
+              $ref: '#/components/schemas/RrhhParametrosCalculo'
       responses:
         '200':
-          description: Parámetros actualizados
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RrhhEnvelopeParametros'
         '422':
           $ref: '#/components/responses/Error422'
 
@@ -2917,6 +4061,7 @@ paths:
         - $ref: '#/components/parameters/page'
         - $ref: '#/components/parameters/pageSize'
         - $ref: '#/components/parameters/search'
+        - $ref: '#/components/parameters/busqueda'
         - name: estado
           in: query
           schema:
@@ -2926,19 +4071,15 @@ paths:
           schema:
             type: string
         - $ref: '#/components/parameters/branchId'
-        - name: fechaInicio
-          in: query
-          schema:
-            type: string
-            format: date
-        - name: fechaFin
-          in: query
-          schema:
-            type: string
-            format: date
+        - $ref: '#/components/parameters/fechaCreacionDesde'
+        - $ref: '#/components/parameters/fechaCreacionHasta'
       responses:
         '200':
           description: Lista de usuarios
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminPaginatedUsuarios'
     post:
       tags: [admin]
       summary: Crear usuario
@@ -2951,6 +4092,10 @@ paths:
       responses:
         '201':
           description: Usuario creado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUsuario'
         '422':
           $ref: '#/components/responses/Error422'
 
@@ -2967,6 +4112,10 @@ paths:
       responses:
         '200':
           description: Usuario encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUsuario'
         '404':
           $ref: '#/components/responses/NotFound'
     put:
@@ -2981,6 +4130,10 @@ paths:
       responses:
         '200':
           description: Usuario actualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUsuario'
         '404':
           $ref: '#/components/responses/NotFound'
     delete:
@@ -3007,6 +4160,7 @@ paths:
         - $ref: '#/components/parameters/page'
         - $ref: '#/components/parameters/pageSize'
         - $ref: '#/components/parameters/search'
+        - $ref: '#/components/parameters/busqueda'
         - name: estado
           in: query
           schema:
@@ -3014,6 +4168,10 @@ paths:
       responses:
         '200':
           description: Lista de roles
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminPaginatedRoles'
     post:
       tags: [admin]
       summary: Crear rol
@@ -3042,6 +4200,10 @@ paths:
       responses:
         '200':
           description: Rol encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminRol'
         '404':
           $ref: '#/components/responses/NotFound'
     put:
@@ -3056,6 +4218,10 @@ paths:
       responses:
         '200':
           description: Rol actualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminRol'
         '404':
           $ref: '#/components/responses/NotFound'
     delete:
@@ -3099,6 +4265,10 @@ paths:
       responses:
         '200':
           description: Permisos actualizados
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminRol'
         '404':
           $ref: '#/components/responses/NotFound'
 
@@ -3107,9 +4277,21 @@ paths:
     get:
       tags: [admin]
       summary: Listar permisos
+      description: |
+        Sin `page` ni `limit`/`pageSize` devuelve un catálogo `Permiso[]` plano.
+        Con paginación, devuelve `{ data, pagination }`.
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/pageSize'
+        - $ref: '#/components/parameters/search'
+        - $ref: '#/components/parameters/busqueda'
       responses:
         '200':
-          description: Lista de permisos
+          description: Catálogo o lista paginada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminPermisosCatalogoOLista'
 
   # ADMIN - SUCURSALES
   /admin/branches:
@@ -3120,6 +4302,7 @@ paths:
         - $ref: '#/components/parameters/page'
         - $ref: '#/components/parameters/pageSize'
         - $ref: '#/components/parameters/search'
+        - $ref: '#/components/parameters/busqueda'
         - name: estado
           in: query
           schema:
@@ -3127,6 +4310,10 @@ paths:
       responses:
         '200':
           description: Lista de sucursales
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminPaginatedSucursales'
     post:
       tags: [admin]
       summary: Crear sucursal
@@ -3155,6 +4342,10 @@ paths:
       responses:
         '200':
           description: Sucursal encontrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminSucursal'
         '404':
           $ref: '#/components/responses/NotFound'
     put:
@@ -3169,6 +4360,10 @@ paths:
       responses:
         '200':
           description: Sucursal actualizada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminSucursal'
         '404':
           $ref: '#/components/responses/NotFound'
     delete:
@@ -3195,6 +4390,7 @@ paths:
         - $ref: '#/components/parameters/page'
         - $ref: '#/components/parameters/pageSize'
         - $ref: '#/components/parameters/search'
+        - $ref: '#/components/parameters/busqueda'
         - name: categoria
           in: query
           schema:
@@ -3206,6 +4402,10 @@ paths:
       responses:
         '200':
           description: Lista de configuraciones
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminPaginatedSettings'
 
   /admin/settings/{id}:
     get:
@@ -3220,6 +4420,10 @@ paths:
       responses:
         '200':
           description: Configuración encontrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminConfiguracionSistema'
         '404':
           $ref: '#/components/responses/NotFound'
     put:
@@ -3234,6 +4438,10 @@ paths:
       responses:
         '200':
           description: Configuración actualizada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminConfiguracionSistema'
         '404':
           $ref: '#/components/responses/NotFound'
 
@@ -3243,7 +4451,11 @@ paths:
       summary: Estadísticas de administración
       responses:
         '200':
-          description: Estadísticas
+          description: KPIs y últimos usuarios para el panel admin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EstadisticasAdmin'
 
   # FORECAST
   /forecast/calculate:

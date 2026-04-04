@@ -27,14 +27,17 @@ settingsRouter.get(
     if (query.limit) queryRecord.limit = query.limit;
     if (query.sortBy) queryRecord.sortBy = query.sortBy;
     if (query.sortDir) queryRecord.sortDir = query.sortDir;
-    if (query.search) queryRecord.search = query.search;
+    const busqueda = query.busqueda ?? query.search;
+    if (busqueda) queryRecord.search = busqueda;
 
     const pagination = parsePagination(queryRecord);
     const filters = {
       categoria: query.categoria,
+      editable:
+        query.editable === 'true' ? true : query.editable === 'false' ? false : undefined,
     };
 
-    const result = await settingService.list({ ...pagination, ...filters });
+    const result = await settingService.list({ ...pagination, ...filters, search: busqueda });
     return ok(c, result);
   }
 );

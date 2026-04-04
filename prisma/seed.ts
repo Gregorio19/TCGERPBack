@@ -18,9 +18,16 @@ async function main() {
   // 1. Branches (primero porque otros recursos dependen de ellas)
   console.log('📦 Creando sucursales...');
   for (const branch of seeds.branches) {
+    const b = branch as typeof branch & {
+      configuracion?: Record<string, unknown>;
+      email?: string;
+    };
     await prisma.branch.upsert({
       where: { id: branch.id },
-      update: {},
+      update: {
+        configuracion: b.configuracion ?? undefined,
+        email: b.email ?? undefined,
+      },
       create: {
         id: branch.id,
         codigo: branch.codigo,
@@ -28,6 +35,8 @@ async function main() {
         direccion: branch.direccion,
         telefono: branch.telefono,
         activa: branch.activa,
+        email: b.email,
+        configuracion: (b.configuracion ?? {}) as object,
       },
     });
   }
@@ -177,22 +186,103 @@ async function main() {
 
   // 8. Employees
   console.log('👔 Creando empleados...');
+  const positionVendedorId = '550e8400-e29b-41d4-a716-446655440070';
+  console.log('👔 Creando cargo y parámetros RRHH...');
+  await prisma.position.upsert({
+    where: { id: positionVendedorId },
+    update: {},
+    create: {
+      id: positionVendedorId,
+      nombre: 'Vendedor',
+      descripcion: 'Venta en tienda',
+      departamento: 'Ventas',
+      nivelJerarquico: 2,
+      sueldoMinimo: 650000,
+      sueldoMaximo: 1100000,
+    },
+  });
+  await prisma.hrCalculationParameters.upsert({
+    where: { id: 'default' },
+    update: {},
+    create: {
+      id: 'default',
+      porcentajeAFP: 10,
+      porcentajeSalud: 7,
+      porcentajeAFC: 0.6,
+      porcentajeMutual: 0.93,
+      tramoImpuesto: 'tramo_1',
+      porcentajeImpuesto: 4,
+      rebajaImpuesto: 12000,
+    },
+  });
+
   for (const employee of seeds.employees) {
+    const empRow = {
+      rut: employee.rut,
+      nombre: employee.nombre,
+      apellidoPaterno: employee.apellidoPaterno,
+      apellidoMaterno: employee.apellidoMaterno,
+      email: employee.email,
+      telefono: employee.telefono ?? null,
+      direccion: employee.direccion ?? undefined,
+      fechaNacimiento: new Date(employee.fechaNacimiento),
+      fechaIngreso: new Date(employee.fechaIngreso),
+      estado: employee.estado,
+      positionId: positionVendedorId,
+    };
+
     await prisma.employee.upsert({
       where: { id: employee.id },
-      update: {},
+      update: empRow,
       create: {
         id: employee.id,
-        rut: employee.rut,
-        nombre: employee.nombre,
-        apellidoPaterno: employee.apellidoPaterno,
-        apellidoMaterno: employee.apellidoMaterno,
-        email: employee.email,
-        fechaNacimiento: new Date(employee.fechaNacimiento),
-        fechaIngreso: new Date(employee.fechaIngreso),
-        estado: employee.estado,
+        ...empRow,
       },
     });
+
+    if (employee.datosBancarios) {
+      const b = employee.datosBancarios;
+      await prisma.employeeBankData.upsert({
+        where: { employeeId: employee.id },
+        update: {
+          banco: b.banco,
+          tipoCuenta: b.tipoCuenta,
+          numeroCuenta: b.numeroCuenta,
+          rutTitular: b.rutTitular,
+        },
+        create: {
+          employeeId: employee.id,
+          banco: b.banco,
+          tipoCuenta: b.tipoCuenta,
+          numeroCuenta: b.numeroCuenta,
+          rutTitular: b.rutTitular,
+        },
+      });
+    }
+
+    if (employee.previsional) {
+      const p = employee.previsional;
+      await prisma.employeeSocialSecurity.upsert({
+        where: { employeeId: employee.id },
+        update: {
+          afp: p.afp,
+          salud: p.salud,
+          isapre: p.isapre ?? null,
+          mutual: p.mutual ?? false,
+          afc: p.afc ?? false,
+          porcentajeAFC: p.porcentajeAFC ?? null,
+        },
+        create: {
+          employeeId: employee.id,
+          afp: p.afp,
+          salud: p.salud,
+          isapre: p.isapre ?? null,
+          mutual: p.mutual ?? false,
+          afc: p.afc ?? false,
+          porcentajeAFC: p.porcentajeAFC ?? null,
+        },
+      });
+    }
   }
 
   console.log('✅ Seed completado!');

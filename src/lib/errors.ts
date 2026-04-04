@@ -35,6 +35,10 @@ export const ErrorCodes = {
   ROLE_NOT_FOUND: 'ROLE_NOT_FOUND',
   BRANCH_NOT_FOUND: 'BRANCH_NOT_FOUND',
   RESOURCE_NOT_FOUND: 'RESOURCE_NOT_FOUND',
+  /** Alias genérico 404 (mismo valor que RESOURCE_NOT_FOUND) */
+  NOT_FOUND: 'RESOURCE_NOT_FOUND',
+  /** Alias genérico 400 (mismo valor que VALIDATION_ERROR) */
+  BAD_REQUEST: 'VALIDATION_ERROR',
 
   // Conflict (409)
   DUPLICATE_SKU: 'DUPLICATE_SKU',

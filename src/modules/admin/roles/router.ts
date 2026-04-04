@@ -7,6 +7,7 @@ import {
   updateRoleDto,
   listRolesQueryDto,
   roleIdParamDto,
+  replaceRolePermissionsDto,
 } from './dto.js';
 import { roleService } from './service.js';
 import { ok, created, noContent } from '../../../lib/responses.js';
@@ -27,14 +28,15 @@ rolesRouter.get(
     if (query.limit) queryRecord.limit = query.limit;
     if (query.sortBy) queryRecord.sortBy = query.sortBy;
     if (query.sortDir) queryRecord.sortDir = query.sortDir;
-    if (query.search) queryRecord.search = query.search;
+    const busqueda = query.busqueda ?? query.search;
+    if (busqueda) queryRecord.search = busqueda;
 
     const pagination = parsePagination(queryRecord);
     const filters = {
       activo: query.activo === 'true' ? true : query.activo === 'false' ? false : undefined,
     };
 
-    const result = await roleService.list({ ...pagination, ...filters });
+    const result = await roleService.list({ ...pagination, ...filters, search: busqueda });
     return ok(c, result);
   }
 );
@@ -48,6 +50,20 @@ rolesRouter.post(
     const data = (c as any).get('validatedBody') as z.infer<typeof createRoleDto>;
     const role = await roleService.create(data);
     return created(c, role);
+  }
+);
+
+rolesRouter.put(
+  '/:id/permissions',
+  authJWT,
+  rbacGuard,
+  validateParams(roleIdParamDto),
+  validateBody(replaceRolePermissionsDto),
+  async (c) => {
+    const { id } = (c as any).get('validatedParams') as { id: string };
+    const body = (c as any).get('validatedBody') as z.infer<typeof replaceRolePermissionsDto>;
+    const role = await roleService.replacePermissions(id, body.permissionIds);
+    return ok(c, role);
   }
 );
 
@@ -87,4 +103,3 @@ rolesRouter.delete(
     return noContent(c);
   }
 );
-

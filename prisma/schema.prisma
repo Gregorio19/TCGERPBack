@@ -158,6 +158,20 @@ enum EmployeeStatus {
   licencia
 }
 
+enum ContractStatus {
+  vigente
+  respaldo
+  terminado
+  suspendido
+}
+
+enum PayrollStatus {
+  pendiente
+  procesada
+  pagada
+  cancelada
+}
+
 // Models
 model Product {
   id              Int          @id @default(autoincrement())
@@ -213,15 +227,17 @@ model StockByBranch {
 }
 
 model Branch {
-  id          String   @id @default(uuid())
-  codigo      String   @unique @db.VarChar(20)
-  nombre      String   @db.VarChar(200)
-  direccion   String   @db.VarChar(500)
-  telefono    String?  @db.VarChar(50)
-  activa      Boolean  @default(true)
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
-  deletedAt   DateTime? @map("deleted_at")
+  id             String   @id @default(uuid())
+  codigo         String   @unique @db.VarChar(20)
+  nombre         String   @db.VarChar(200)
+  direccion      String   @db.VarChar(500)
+  telefono       String?  @db.VarChar(50)
+  email          String?  @db.VarChar(255)
+  configuracion  Json?
+  activa         Boolean  @default(true)
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+  deletedAt      DateTime? @map("deleted_at")
 
   // Relations
   stockByBranch   StockByBranch[]
@@ -468,45 +484,104 @@ model EntryMovement {
   @@map("entry_movements")
 }
 
-model Employee {
-  id                String        @id @default(uuid())
-  rut               String        @unique @db.VarChar(20)
-  nombre            String        @db.VarChar(100)
-  apellidoPaterno   String        @map("apellido_paterno") @db.VarChar(100)
-  apellidoMaterno   String        @map("apellido_materno") @db.VarChar(100)
-  email             String        @unique @db.VarChar(255)
-  fechaNacimiento   DateTime      @map("fecha_nacimiento")
-  fechaIngreso      DateTime      @map("fecha_ingreso")
-  estado            EmployeeStatus @default(activo)
-  branchId          String?       @map("branch_id")
-  createdAt         DateTime      @default(now()) @map("created_at")
-  updatedAt         DateTime      @updatedAt @map("updated_at")
-  deletedAt         DateTime?     @map("deleted_at")
+model Position {
+  id                String    @id @default(uuid())
+  nombre            String    @db.VarChar(200)
+  descripcion       String?   @db.VarChar(500)
+  departamento      String    @db.VarChar(120)
+  nivelJerarquico   Int       @map("nivel_jerarquico")
+  sueldoMinimo      Int       @map("sueldo_minimo")
+  sueldoMaximo      Int       @map("sueldo_maximo")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
 
-  // Relations
-  branch            Branch?       @relation(fields: [branchId], references: [id])
+  employees Employee[]
+
+  @@index([departamento])
+  @@map("positions")
+}
+
+model Employee {
+  id                String         @id @default(uuid())
+  rut               String         @unique @db.VarChar(20)
+  nombre            String         @db.VarChar(100)
+  apellidoPaterno   String         @map("apellido_paterno") @db.VarChar(100)
+  apellidoMaterno   String         @map("apellido_materno") @db.VarChar(100)
+  email             String         @unique @db.VarChar(255)
+  telefono          String?        @db.VarChar(50)
+  direccion         Json?
+  fechaNacimiento   DateTime       @map("fecha_nacimiento")
+  fechaIngreso      DateTime       @map("fecha_ingreso")
+  estado            EmployeeStatus @default(activo)
+  branchId          String?        @map("branch_id")
+  positionId        String?        @map("position_id")
+  createdAt         DateTime       @default(now()) @map("created_at")
+  updatedAt         DateTime       @updatedAt @map("updated_at")
+  deletedAt         DateTime?      @map("deleted_at")
+
+  branch            Branch?        @relation(fields: [branchId], references: [id])
+  position          Position?      @relation(fields: [positionId], references: [id])
+  bankData          EmployeeBankData?
+  socialSecurity    EmployeeSocialSecurity?
   contracts         Contract[]
   payrolls          Payroll[]
-  contributions     Contribution[]
+  contributionSummaries EmployeeContributionSummary[]
 
   @@index([rut])
   @@index([email])
   @@index([estado])
+  @@index([positionId])
   @@map("employees")
 }
 
-model Contract {
-  id              String    @id @default(uuid())
-  employeeId      String    @map("employee_id")
-  tipo            String    @db.VarChar(50)
-  fechaInicio     DateTime  @map("fecha_inicio")
-  fechaTermino    DateTime? @map("fecha_termino")
-  sueldoBase      Int       @map("sueldo_base")
-  estado          String    @default("vigente") @db.VarChar(50)
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
+model EmployeeBankData {
+  id           String   @id @default(uuid())
+  employeeId   String   @unique @map("employee_id")
+  banco        String   @db.VarChar(120)
+  tipoCuenta   String   @map("tipo_cuenta") @db.VarChar(50)
+  numeroCuenta String   @map("numero_cuenta") @db.VarChar(50)
+  rutTitular   String   @map("rut_titular") @db.VarChar(20)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
 
-  employee        Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@map("employee_bank_data")
+}
+
+model EmployeeSocialSecurity {
+  id            String   @id @default(uuid())
+  employeeId    String   @unique @map("employee_id")
+  afp           String   @db.VarChar(50)
+  salud         String   @db.VarChar(50)
+  isapre        String?  @db.VarChar(120)
+  mutual        Boolean  @default(false)
+  afc           Boolean  @default(false)
+  porcentajeAFC Float?   @map("porcentaje_afc")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@map("employee_social_security")
+}
+
+model Contract {
+  id              String         @id @default(uuid())
+  employeeId      String         @map("employee_id")
+  numeroContrato  String?        @unique @map("numero_contrato") @db.VarChar(50)
+  tipo            String         @db.VarChar(50)
+  jornada         String?        @db.VarChar(50)
+  fechaInicio     DateTime       @map("fecha_inicio")
+  fechaTermino    DateTime?      @map("fecha_termino")
+  sueldoBase      Int            @map("sueldo_base")
+  estado          ContractStatus @default(vigente)
+  observaciones   String?        @db.Text
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+
+  employee        Employee       @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  payrolls        Payroll[]
 
   @@index([employeeId])
   @@index([estado])
@@ -514,39 +589,112 @@ model Contract {
 }
 
 model Payroll {
-  id          String    @id @default(uuid())
-  employeeId  String    @map("employee_id")
-  periodo     String    @db.VarChar(7) // YYYY-MM
-  sueldoBase  Int       @map("sueldo_base")
-  bonos       Int       @default(0)
-  descuentos  Int       @default(0)
-  total       Int
-  estado      String    @default("pendiente") @db.VarChar(50)
-  fechaPago   DateTime? @map("fecha_pago")
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
+  id                  String        @id @default(uuid())
+  employeeId          String        @map("employee_id")
+  contractId          String?       @map("contract_id")
+  periodo             String        @db.VarChar(7)
+  sueldoBase          Int           @map("sueldo_base")
+  totalHaberes        Int           @default(0) @map("total_haberes")
+  totalDescuentos     Int           @default(0) @map("total_descuentos")
+  totalImposiciones   Int           @default(0) @map("total_imposiciones")
+  liquido             Int
+  estado              PayrollStatus @default(pendiente)
+  fechaGeneracion     DateTime?     @map("fecha_generacion") @db.Date
+  fechaPago           DateTime?     @map("fecha_pago") @db.Date
+  observaciones       String?       @db.Text
+  createdAt           DateTime      @default(now()) @map("created_at")
+  updatedAt           DateTime      @updatedAt @map("updated_at")
 
-  employee    Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employee            Employee      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  contract            Contract?     @relation(fields: [contractId], references: [id])
+  earnings            PayrollEarning[]
+  deductions          PayrollDeduction[]
+  impositionLines     PayrollImpositionLine[]
 
-  @@index([employeeId])
+  @@unique([employeeId, periodo])
   @@index([periodo])
   @@index([estado])
   @@map("payrolls")
 }
 
-model Contribution {
-  id          String    @id @default(uuid())
-  employeeId  String    @map("employee_id")
-  periodo     String    @db.VarChar(7) // YYYY-MM
-  tipo        String    @db.VarChar(50) // AFP, SALUD, etc.
-  monto       Int
-  createdAt   DateTime  @default(now()) @map("created_at")
+model PayrollEarning {
+  id            String   @id @default(uuid())
+  payrollId     String   @map("payroll_id")
+  tipo          String   @db.VarChar(80)
+  descripcion   String   @db.VarChar(500)
+  monto         Int
+  esImponible   Boolean  @map("es_imponible")
+  esTributable  Boolean  @map("es_tributable")
 
-  employee    Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  payroll       Payroll  @relation(fields: [payrollId], references: [id], onDelete: Cascade)
 
-  @@index([employeeId])
+  @@index([payrollId])
+  @@map("payroll_earnings")
+}
+
+model PayrollDeduction {
+  id             String   @id @default(uuid())
+  payrollId      String   @map("payroll_id")
+  tipo           String   @db.VarChar(80)
+  descripcion    String   @db.VarChar(500)
+  porcentaje     Float?
+  monto          Int
+  esLegal        Boolean  @map("es_legal")
+  esVoluntario   Boolean  @map("es_voluntario")
+
+  payroll        Payroll  @relation(fields: [payrollId], references: [id], onDelete: Cascade)
+
+  @@index([payrollId])
+  @@map("payroll_deductions")
+}
+
+model PayrollImpositionLine {
+  id             String   @id @default(uuid())
+  payrollId      String   @map("payroll_id")
+  tipo           String   @db.VarChar(80)
+  descripcion    String   @db.VarChar(500)
+  porcentaje     Float?
+  baseImponible  Int      @map("base_imponible")
+  monto          Int
+  esObligatoria  Boolean  @map("es_obligatoria")
+
+  payroll        Payroll  @relation(fields: [payrollId], references: [id], onDelete: Cascade)
+
+  @@index([payrollId])
+  @@map("payroll_imposition_lines")
+}
+
+model EmployeeContributionSummary {
+  id                  String   @id @default(uuid())
+  employeeId          String   @map("employee_id")
+  periodo             String   @db.VarChar(7)
+  fechaGeneracion     DateTime @map("fecha_generacion") @db.Date
+  totalImposiciones   Int      @map("total_imposiciones")
+  afp                 Json
+  salud               Json
+  afc                 Json
+  mutual              Json
+
+  employee            Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, periodo])
   @@index([periodo])
-  @@map("contributions")
+  @@map("employee_contribution_summaries")
+}
+
+model HrCalculationParameters {
+  id                   String   @id @default("default")
+  porcentajeAFP        Float    @map("porcentaje_afp")
+  porcentajeSalud      Float    @map("porcentaje_salud")
+  porcentajeAFC        Float    @map("porcentaje_afc")
+  porcentajeMutual     Float    @map("porcentaje_mutual")
+  tramoImpuesto        String   @map("tramo_impuesto") @db.VarChar(50)
+  porcentajeImpuesto   Float    @map("porcentaje_impuesto")
+  rebajaImpuesto       Int      @map("rebaja_impuesto")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  @@map("hr_calculation_parameters")
 }
 
 model User {
@@ -556,6 +704,9 @@ model User {
   passwordHash String  @map("password_hash") @db.VarChar(255)
   nombre      String   @db.VarChar(100)
   apellido    String   @db.VarChar(100)
+  telefono    String?  @db.VarChar(50)
+  avatar      String?  @db.VarChar(500)
+  ultimoAcceso DateTime? @map("ultimo_acceso")
   activo      Boolean  @default(true)
   sucursalId  String   @map("sucursal_id")
   createdAt   DateTime @default(now()) @map("created_at")
@@ -609,6 +760,7 @@ model Permission {
   nombre      String   @unique @db.VarChar(100)
   recurso     String   @db.VarChar(50)
   accion      String   @db.VarChar(50)
+  categoria   String   @default("general") @db.VarChar(50)
   descripcion String?  @db.VarChar(500)
   createdAt   DateTime @default(now()) @map("created_at")
 
@@ -638,6 +790,7 @@ model Setting {
   id          String   @id @default(uuid())
   clave       String   @unique @db.VarChar(100)
   valor       String   @db.Text
+  tipo        String   @default("string") @db.VarChar(50)
   categoria   String   @db.VarChar(50)
   descripcion String?  @db.VarChar(500)
   editable    Boolean  @default(true)

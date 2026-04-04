@@ -43,6 +43,10 @@ export const mapCustomer = (customer: any) => {
     fechaRegistro: toISOString(customer.fechaRegistro),
     createdAt: toISOString(customer.createdAt),
     updatedAt: toISOString(customer.updatedAt),
+    fechaUltimaCompra: customer.fechaUltimaCompra
+      ? toISOString(customer.fechaUltimaCompra)
+      : null,
+    montoUltimaCompra: customer.montoUltimaCompra ?? null,
   };
 };
 

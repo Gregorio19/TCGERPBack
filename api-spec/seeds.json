@@ -108,9 +108,30 @@
       "apellidoPaterno": "Rodríguez",
       "apellidoMaterno": "López",
       "email": "carlos.rodriguez@tcg-erp.com",
+      "telefono": "+56912345678",
       "fechaNacimiento": "1990-05-15",
       "fechaIngreso": "2023-01-15",
-      "estado": "activo"
+      "estado": "activo",
+      "direccion": {
+        "calle": "Av. Siempre Viva",
+        "numero": "123",
+        "comuna": "Santiago",
+        "region": "Metropolitana",
+        "codigoPostal": "8320000"
+      },
+      "datosBancarios": {
+        "banco": "Banco de Chile",
+        "tipoCuenta": "corriente",
+        "numeroCuenta": "12345678",
+        "rutTitular": "12.345.678-9"
+      },
+      "previsional": {
+        "afp": "habitat",
+        "salud": "fonasa",
+        "mutual": true,
+        "afc": true,
+        "porcentajeAFC": 0.6
+      }
     }
   ],
   "accounts": [
@@ -149,7 +170,17 @@
       "nombre": "Sucursal Centro",
       "direccion": "Av. Libertador Bernardo O'Higgins 1234, Santiago",
       "telefono": "+56 2 2345 6789",
-      "activa": true
+      "activa": true,
+      "configuracion": {
+        "ivaIncluido": true,
+        "moneda": "CLP",
+        "formatoFecha": "DD/MM/YYYY",
+        "formatoHora": "HH:mm",
+        "zonaHoraria": "America/Santiago",
+        "decimales": 0,
+        "separadorMiles": ".",
+        "separadorDecimal": ","
+      }
     },
     {
       "id": "550e8400-e29b-41d4-a716-446655440041",
@@ -157,7 +188,17 @@
       "nombre": "Sucursal Norte",
       "direccion": "Av. Apoquindo 4500, Las Condes",
       "telefono": "+56 2 2345 6790",
-      "activa": true
+      "activa": true,
+      "configuracion": {
+        "ivaIncluido": true,
+        "moneda": "CLP",
+        "formatoFecha": "DD/MM/YYYY",
+        "formatoHora": "HH:mm",
+        "zonaHoraria": "America/Santiago",
+        "decimales": 0,
+        "separadorMiles": ".",
+        "separadorDecimal": ","
+      }
     }
   ],
   "users": [

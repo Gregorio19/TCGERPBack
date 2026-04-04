@@ -91,7 +91,7 @@ export const customerService = {
       orderBy.createdAt = 'desc';
     }
 
-    const [data, total] = await Promise.all([
+    const [rows, total] = await Promise.all([
       db.customer.findMany({
         where,
         orderBy,
@@ -100,6 +100,28 @@ export const customerService = {
       }),
       db.customer.count({ where }),
     ]);
+
+    // Última compra por cliente (fecha y monto) para los IDs de esta página
+    let data = rows;
+    if (rows.length > 0) {
+      const customerIds = rows.map((c) => c.id);
+      type LastOrderRow = { cliente_id: string; fecha_creacion: Date; total: number };
+      const lastOrders = await db.$queryRaw<LastOrderRow[]>`
+        SELECT DISTINCT ON (cliente_id) cliente_id, fecha_creacion, total
+        FROM orders
+        WHERE deleted_at IS NULL
+          AND cliente_id IN (${Prisma.join(customerIds)})
+        ORDER BY cliente_id, fecha_creacion DESC
+      `;
+      const lastByCustomer = new Map(
+        lastOrders.map((r) => [r.cliente_id, { fechaCreacion: r.fecha_creacion, total: r.total }])
+      );
+      data = rows.map((c) => ({
+        ...c,
+        fechaUltimaCompra: lastByCustomer.get(c.id)?.fechaCreacion ?? null,
+        montoUltimaCompra: lastByCustomer.get(c.id)?.total ?? null,
+      }));
+    }
 
     return buildPaginatedResponse(data, total, page, pageSize);
   },

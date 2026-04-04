@@ -2,11 +2,40 @@ import { db } from '../../../lib/db.js';
 import { AppError, ErrorCodes } from '../../../lib/errors.js';
 import { PaginationParams, buildPaginatedResponse } from '../../../lib/pagination.js';
 import { Prisma } from '@prisma/client';
+import { mapPermiso } from '../mapper.js';
+
+/** Resuelve ids de permiso (UUID o `nombre` estable) a UUIDs de BD, en el mismo orden. */
+export async function resolvePermissionIdsToUuids(ids: string[]): Promise<string[]> {
+  if (ids.length === 0) return [];
+  const unique = [...new Set(ids)];
+  const rows = await db.permission.findMany({
+    where: {
+      OR: [{ id: { in: unique } }, { nombre: { in: unique } }],
+    },
+  });
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  const byNombre = new Map(rows.map((r) => [r.nombre, r]));
+  const out: string[] = [];
+  for (const id of ids) {
+    const p = byId.get(id) ?? byNombre.get(id);
+    if (!p) {
+      throw new AppError(ErrorCodes.VALIDATION_ERROR, `Permiso no encontrado: ${id}`, 422);
+    }
+    out.push(p.id);
+  }
+  return [...new Set(out)];
+}
 
 export const permissionService = {
+  async listAllCatalog() {
+    const rows = await db.permission.findMany({
+      orderBy: [{ categoria: 'asc' }, { recurso: 'asc' }, { accion: 'asc' }],
+    });
+    return rows.map((p) => mapPermiso(p));
+  },
   async list(params: PaginationParams & { search?: string; recurso?: string; accion?: string }) {
     const page = Number(params.page) || 1;
-    const limit = Number(params.limit) || 10;
+    const limit = Number(params.pageSize) || 10;
     const skip = (page - 1) * limit;
 
     const where: Prisma.PermissionWhereInput = {};
@@ -63,7 +92,7 @@ export const permissionService = {
     });
 
     if (!permission) {
-      throw new AppError(ErrorCodes.NOT_FOUND, 'Permiso no encontrado', 404);
+      throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 'Permiso no encontrado', 404);
     }
 
     return permission;
@@ -73,6 +102,7 @@ export const permissionService = {
     nombre: string;
     recurso: string;
     accion: string;
+    categoria?: string;
     descripcion?: string;
   }) {
     // Validar nombre único
@@ -81,7 +111,7 @@ export const permissionService = {
     });
 
     if (existingName) {
-      throw new AppError(ErrorCodes.CONFLICT, `Ya existe un permiso con el nombre '${data.nombre}'`, 409);
+      throw new AppError(ErrorCodes.DUPLICATE_CODE, `Ya existe un permiso con el nombre '${data.nombre}'`, 409);
     }
 
     // Validar combinación recurso+acción única (aunque Prisma también lo valida)
@@ -94,14 +124,20 @@ export const permissionService = {
 
     if (existingCombo) {
       throw new AppError(
-        ErrorCodes.CONFLICT,
+        ErrorCodes.DUPLICATE_CODE,
         `Ya existe un permiso con recurso '${data.recurso}' y acción '${data.accion}'`,
         409
       );
     }
 
     return db.permission.create({
-      data,
+      data: {
+        nombre: data.nombre,
+        recurso: data.recurso,
+        accion: data.accion,
+        descripcion: data.descripcion,
+        categoria: data.categoria ?? 'general',
+      },
     });
   },
 
@@ -119,7 +155,7 @@ export const permissionService = {
       });
 
       if (existingName) {
-        throw new AppError(ErrorCodes.CONFLICT, `Ya existe un permiso con el nombre '${data.nombre}'`, 409);
+        throw new AppError(ErrorCodes.DUPLICATE_CODE, `Ya existe un permiso con el nombre '${data.nombre}'`, 409);
       }
     }
 
@@ -135,7 +171,7 @@ export const permissionService = {
 
       if (existingCombo) {
         throw new AppError(
-          ErrorCodes.CONFLICT,
+          ErrorCodes.DUPLICATE_CODE,
           `Ya existe un permiso con esa combinación de recurso y acción`,
           409
         );
@@ -158,7 +194,7 @@ export const permissionService = {
 
     if (rolePermissions.length > 0) {
       throw new AppError(
-        ErrorCodes.CONFLICT,
+        ErrorCodes.CONFLICT_STATE,
         `No se puede eliminar el permiso porque está asignado a ${rolePermissions.length} rol(es)`,
         409
       );

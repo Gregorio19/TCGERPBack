@@ -21,16 +21,24 @@ permissionsRouter.get(
   validateQuery(listPermissionsQueryDto),
   async (c) => {
     const query = (c as any).get('validatedQuery') as z.infer<typeof listPermissionsQueryDto>;
+    const busqueda = query.busqueda ?? query.search;
+    const noPagination = !query.page && !query.limit && !query.pageSize;
+    if (noPagination) {
+      const catalog = await permissionService.listAllCatalog();
+      return ok(c, catalog);
+    }
+
     const queryRecord: Record<string, string | undefined> = {};
     if (query.page) queryRecord.page = query.page;
     if (query.pageSize) queryRecord.pageSize = query.pageSize;
     if (query.limit) queryRecord.limit = query.limit;
     if (query.sortBy) queryRecord.sortBy = query.sortBy;
     if (query.sortDir) queryRecord.sortDir = query.sortDir;
-    if (query.search) queryRecord.search = query.search;
+    if (busqueda) queryRecord.search = busqueda;
 
     const pagination = parsePagination(queryRecord);
     const filters = {
+      search: busqueda,
       recurso: query.recurso,
       accion: query.accion,
     };

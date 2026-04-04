@@ -55,7 +55,11 @@ export const mapPathToResource = (path: string, method: string): { resource: str
     return null;
   }
 
-  const resource = pathParts[0];
+  let resource = pathParts[0];
+  // API usa prefijo /hr; permisos en rbac.json están bajo "rrhh"
+  if (resource === 'hr') {
+    resource = 'rrhh';
+  }
   let action = 'read';
 
   if (method === 'GET') {
@@ -79,9 +83,22 @@ export const mapPathToResource = (path: string, method: string): { resource: str
   }
 
   if (resource === 'rrhh' && pathParts.includes('payroll')) {
-    if (pathParts.includes('generar') || pathParts.includes('procesar')) {
+    if (
+      pathParts.includes('generar') ||
+      pathParts.includes('procesar') ||
+      pathParts.includes('calcular') ||
+      pathParts.includes('exportar')
+    ) {
       return { resource: 'rrhh', action: 'process_payroll' };
     }
+  }
+
+  if (resource === 'rrhh' && pathParts.includes('contributions') && pathParts.includes('exportar')) {
+    return { resource: 'rrhh', action: 'process_payroll' };
+  }
+
+  if (resource === 'rrhh' && pathParts.includes('contributions') && pathParts.includes('generar')) {
+    return { resource: 'rrhh', action: 'process_payroll' };
   }
 
   if (resource === 'reports' && method === 'POST') {
