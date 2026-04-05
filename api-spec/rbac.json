@@ -15,7 +15,9 @@
         "rrhh": { "create": true, "read": true, "update": true, "delete": true, "process_payroll": true },
         "admin": { "create": true, "read": true, "update": true, "delete": true },
         "reports": { "read": true, "generate": true, "export": true },
-        "forecast": { "read": true, "calculate": true, "configure": true }
+        "forecast": { "read": true, "calculate": true, "configure": true },
+        "dashboard": { "read": true },
+        "charts": { "read": true }
       }
     },
     "Cajero": {
@@ -30,7 +32,9 @@
         "rrhh": { "create": false, "read": false, "update": false, "delete": false },
         "admin": { "create": false, "read": false, "update": false, "delete": false },
         "reports": { "read": true, "generate": false, "export": false },
-        "forecast": { "read": false, "calculate": false, "configure": false }
+        "forecast": { "read": false, "calculate": false, "configure": false },
+        "dashboard": { "read": true },
+        "charts": { "read": true }
       }
     },
     "Bodeguero": {
@@ -48,7 +52,9 @@
         "rrhh": { "create": false, "read": false, "update": false, "delete": false },
         "admin": { "create": false, "read": false, "update": false, "delete": false },
         "reports": { "read": true, "generate": false, "export": false },
-        "forecast": { "read": false, "calculate": false, "configure": false }
+        "forecast": { "read": false, "calculate": false, "configure": false },
+        "dashboard": { "read": true },
+        "charts": { "read": true }
       }
     },
     "Contador": {
@@ -63,7 +69,9 @@
         "rrhh": { "create": false, "read": false, "update": false, "delete": false },
         "admin": { "create": false, "read": false, "update": false, "delete": false },
         "reports": { "read": true, "generate": true, "export": true },
-        "forecast": { "read": false, "calculate": false, "configure": false }
+        "forecast": { "read": false, "calculate": false, "configure": false },
+        "dashboard": { "read": true },
+        "charts": { "read": true }
       }
     },
     "RRHH": {
@@ -78,7 +86,9 @@
         "rrhh": { "create": true, "read": true, "update": true, "delete": false, "process_payroll": true },
         "admin": { "create": false, "read": false, "update": false, "delete": false },
         "reports": { "read": true, "generate": true, "export": true },
-        "forecast": { "read": false, "calculate": false, "configure": false }
+        "forecast": { "read": false, "calculate": false, "configure": false },
+        "dashboard": { "read": true },
+        "charts": { "read": true }
       }
     },
     "Viewer": {
@@ -96,7 +106,29 @@
         "rrhh": { "create": false, "read": true, "update": false, "delete": false, "process_payroll": false },
         "admin": { "create": false, "read": true, "update": false, "delete": false },
         "reports": { "read": true, "generate": false, "export": false },
-        "forecast": { "read": true, "calculate": false, "configure": false }
+        "forecast": { "read": true, "calculate": false, "configure": false },
+        "dashboard": { "read": true },
+        "charts": { "read": true }
+      }
+    },
+    "doctor": {
+      "description": "Rol clínico/operativo; permisos UI vía BD. API: base lectura amplia (ajustar según negocio).",
+      "permissions": {
+        "products": { "create": false, "read": true, "update": false, "delete": false },
+        "inventory": { "create": false, "read": true, "update": false, "delete": false },
+        "recepciones": { "create": false, "read": true, "update": false, "delete": false },
+        "transferencias": { "create": false, "read": true, "update": false, "delete": false },
+        "proveedores": { "create": false, "read": true, "update": false, "delete": false },
+        "sales": { "create": false, "read": true, "update": false, "delete": false },
+        "orders": { "create": false, "read": true, "update": false, "delete": false },
+        "customers": { "create": false, "read": true, "update": false, "delete": false },
+        "accounting": { "create": false, "read": true, "update": false, "delete": false, "approve": false, "post": false },
+        "rrhh": { "create": false, "read": true, "update": false, "delete": false, "process_payroll": false },
+        "admin": { "create": false, "read": true, "update": false, "delete": false },
+        "reports": { "read": true, "generate": false, "export": false },
+        "forecast": { "read": true, "calculate": false, "configure": false },
+        "dashboard": { "read": true },
+        "charts": { "read": true }
       }
     }
   },
@@ -113,7 +145,9 @@
     "rrhh": "Recursos Humanos",
     "admin": "Administración del sistema",
     "reports": "Reportes y estadísticas",
-    "forecast": "Proyecciones y forecast"
+    "forecast": "Proyecciones y forecast",
+    "dashboard": "KPIs y resumen home",
+    "charts": "Gráficos del dashboard"
   },
   "actions": {
     "create": "Crear nuevo recurso",

@@ -11,6 +11,8 @@ import { authRouter } from './modules/auth/router.js';
 import { recepcionesRouter } from './modules/recepciones/router.js';
 import { proveedoresRouter } from './modules/proveedores/router.js';
 import { transferenciasRouter } from './modules/transferencias/router.js';
+import { dashboardRouter } from './modules/dashboard/router.js';
+import { chartsRouter } from './modules/charts/router.js';
 
 export const routes = new Hono();
 
@@ -29,3 +31,5 @@ routes.route('/admin', adminRouter);
 routes.route('/recepciones', recepcionesRouter);
 routes.route('/transferencias', transferenciasRouter);
 routes.route('/proveedores', proveedoresRouter);
+routes.route('/dashboard', dashboardRouter);
+routes.route('/charts', chartsRouter);

@@ -2,8 +2,8 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import app from '../../app.js';
 
-/** Rol Cajero del seed (`api-spec/seeds.json`) */
-const ROLE_CAJERO_ID = '550e8400-e29b-41d4-a716-446655440081';
+/** Rol doctor del seed (`api-spec/seeds.json`); sin permisos por defecto (solo Admin recibe catálogo en seed). */
+const ROLE_DOCTOR_ID = '550e8400-e29b-41d4-a716-446655440083';
 
 describe('Admin API (integración)', () => {
   it('GET /api/admin/stats devuelve KPIs y arrays esperados', async () => {
@@ -53,7 +53,7 @@ describe('Admin API (integración)', () => {
     const permissionIds = Array.isArray(perms) ? perms.slice(0, 2).map((p) => p.id) : [];
 
     const putRes = await app.request(
-      `http://localhost/api/admin/roles/${ROLE_CAJERO_ID}/permissions`,
+      `http://localhost/api/admin/roles/${ROLE_DOCTOR_ID}/permissions`,
       {
         method: 'PUT',
         headers: {

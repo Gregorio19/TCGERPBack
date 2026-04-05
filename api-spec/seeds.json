@@ -231,6 +231,12 @@
       "nombre": "Bodeguero",
       "descripcion": "Bodeguero con acceso a inventario",
       "activo": true
+    },
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440083",
+      "nombre": "doctor",
+      "descripcion": "Rol para asignar permisos UI desde admin (sin catálogo por defecto)",
+      "activo": true
     }
   ],
   "notes": {

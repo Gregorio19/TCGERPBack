@@ -9,6 +9,65 @@ const __dirname = dirname(__filename);
 
 const prisma = new PrismaClient();
 
+type CanonicalCatalog = {
+  permissions: Array<{
+    nombre: string;
+    recurso: string;
+    accion: string;
+    categoria: string;
+    descripcion: string;
+  }>;
+};
+
+function loadPermissionsCanonical(): CanonicalCatalog {
+  const path = join(__dirname, '../api-spec/permissions-canonical.json');
+  const raw = JSON.parse(readFileSync(path, 'utf-8')) as CanonicalCatalog & Record<string, unknown>;
+  if (!Array.isArray(raw.permissions)) {
+    throw new Error('permissions-canonical.json: falta array "permissions"');
+  }
+  return raw;
+}
+
+/**
+ * Catálogo alineado con el front (RouteGuard). Sustituye filas previas (p. ej. rbac.json).
+ * Orden: vacía pivotes y permisos, recrea catálogo, asigna todo al rol Admin.
+ */
+async function seedPermissionsCatalog() {
+  const catalog = loadPermissionsCanonical();
+
+  console.log('🔐 Permisos canónicos (front): limpiando role_permissions y permissions...');
+  await prisma.rolePermission.deleteMany({});
+  await prisma.permission.deleteMany({});
+
+  await prisma.permission.createMany({
+    data: catalog.permissions.map((p) => ({
+      nombre: p.nombre,
+      recurso: p.recurso,
+      accion: p.accion,
+      categoria: p.categoria,
+      descripcion: p.descripcion,
+    })),
+  });
+
+  const adminRole = await prisma.role.findFirst({
+    where: { nombre: 'Admin', deletedAt: null },
+  });
+
+  if (!adminRole) {
+    console.log('   → Sin rol Admin: permisos creados sin enlaces.');
+    return;
+  }
+
+  const allPerms = await prisma.permission.findMany({ select: { id: true } });
+  await prisma.rolePermission.createMany({
+    data: allPerms.map((p) => ({ roleId: adminRole.id, permissionId: p.id })),
+  });
+
+  console.log(
+    `   → ${catalog.permissions.length} permisos; todos asignados al rol Admin (${allPerms.length} enlaces).`
+  );
+}
+
 async function main() {
   console.log('🌱 Iniciando seed...');
 
@@ -55,6 +114,8 @@ async function main() {
       },
     });
   }
+
+  await seedPermissionsCatalog();
 
   // 3. Users (depende de branches y roles)
   console.log('👤 Creando usuarios...');

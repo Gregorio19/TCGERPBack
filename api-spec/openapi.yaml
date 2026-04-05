@@ -1731,6 +1731,154 @@ components:
               sucursal:
                 $ref: '#/components/schemas/AdminSucursal'
 
+    DashboardStats:
+      type: object
+      required:
+        - totalProductos
+        - totalStock
+        - ventasMensuales
+        - carritosActivos
+        - productosBajoStock
+        - totalClientes
+        - totalPedidos
+        - topCategorias
+        - ventasRecientes
+        - productosPopulares
+      properties:
+        totalProductos:
+          type: integer
+        totalStock:
+          type: integer
+        ventasMensuales:
+          type: integer
+          description: Suma de totales de órdenes del mes UTC actual (excl. canceladas/reembolsadas/devueltas)
+        carritosActivos:
+          type: integer
+          description: Siempre 0 hasta exista carrito persistido
+        productosBajoStock:
+          type: integer
+          description: Productos activos con stock menor al umbral fijo (5)
+        totalClientes:
+          type: integer
+        totalPedidos:
+          type: integer
+        topCategorias:
+          type: array
+          items:
+            type: object
+            required: [nombre, cantidad, porcentaje]
+            properties:
+              nombre:
+                type: string
+              cantidad:
+                type: integer
+              porcentaje:
+                type: number
+        ventasRecientes:
+          type: array
+          items:
+            type: object
+            required: [id, cliente, total, fecha]
+            properties:
+              id:
+                type: string
+                description: Número de orden
+              cliente:
+                type: string
+              total:
+                type: integer
+              fecha:
+                type: string
+                format: date-time
+        productosPopulares:
+          type: array
+          items:
+            type: object
+            required: [id, nombre, ventas]
+            properties:
+              id:
+                type: integer
+              nombre:
+                type: string
+              ventas:
+                type: integer
+
+    ChartMonthlySaleRow:
+      type: object
+      required: [mes, ventas, productos, clientes]
+      properties:
+        mes:
+          type: string
+          description: Etiqueta YYYY-MM (UTC)
+        ventas:
+          type: integer
+        productos:
+          type: integer
+          description: Unidades vendidas (suma cantidades en ítems)
+        clientes:
+          type: integer
+          description: Clientes distintos con pedido en el mes
+
+    ChartCategoryRow:
+      type: object
+      required: [categoria, cantidad, porcentaje]
+      properties:
+        categoria:
+          type: string
+        cantidad:
+          type: integer
+        porcentaje:
+          type: number
+
+    ChartStockRow:
+      type: object
+      required: [producto, stock, stockMinimo]
+      properties:
+        producto:
+          type: string
+        stock:
+          type: integer
+        stockMinimo:
+          type: integer
+          description: Umbral de referencia (5); no persiste en Product
+
+    ChartTrendRow:
+      type: object
+      required: [fecha, ingresos, gastos, ganancia]
+      properties:
+        fecha:
+          type: string
+          description: Fecha YYYY-MM-DD (UTC)
+        ingresos:
+          type: integer
+        gastos:
+          type: integer
+          description: v1 siempre 0
+        ganancia:
+          type: integer
+          description: v1 igual a ingresos
+
+    DashboardChartsBundle:
+      type: object
+      required: [ventasMensuales, distribucionCategorias, estadoStock, tendencias]
+      properties:
+        ventasMensuales:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChartMonthlySaleRow'
+        distribucionCategorias:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChartCategoryRow'
+        estadoStock:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChartStockRow'
+        tendencias:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChartTrendRow'
+
 paths:
   # PRODUCTOS
   /products:
@@ -4151,6 +4299,42 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /admin/users/{id}/password:
+    put:
+      tags: [admin]
+      summary: Cambiar contraseña (admin)
+      description: Establece una nueva contraseña para el usuario. El backend hashea; no se devuelve la clave.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [newPassword]
+              properties:
+                newPassword:
+                  type: string
+                  minLength: 8
+                  maxLength: 100
+      responses:
+        '200':
+          description: Usuario actualizado (sin password)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUsuario'
+        '400':
+          $ref: '#/components/responses/Error422'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   # ADMIN - ROLES
   /admin/roles:
     get:
@@ -4784,52 +4968,110 @@ paths:
   /dashboard/stats:
     get:
       tags: [dashboard]
-      summary: Estadísticas del dashboard
+      summary: Estadísticas del dashboard (KPIs y listas)
       responses:
         '200':
-          description: Estadísticas
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardStats'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: Sin permiso dashboard.read
 
   /dashboard/charts:
     get:
       tags: [dashboard]
-      summary: Datos para gráficos
+      summary: Datos para gráficos (bundle)
+      description: Misma información que los cuatro GET /charts/* en un objeto.
       parameters:
         - name: type
           in: query
           schema:
             type: string
+          description: Ignorado; reservado para compatibilidad
       responses:
         '200':
-          description: Datos de gráficos
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardChartsBundle'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: Sin permiso dashboard.read
 
   /charts/monthly-sales:
     get:
       tags: [dashboard]
-      summary: Ventas mensuales
+      summary: Ventas mensuales (últimos 12 meses UTC)
       responses:
         '200':
-          description: Datos de ventas mensuales
+          description: Array plano
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ChartMonthlySaleRow'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: Sin permiso charts.read
 
   /charts/categories:
     get:
       tags: [dashboard]
-      summary: Datos de categorías
+      summary: Distribución por categorías (catálogo productos)
       responses:
         '200':
-          description: Datos de categorías
+          description: Array plano
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ChartCategoryRow'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: Sin permiso charts.read
 
   /charts/stock:
     get:
       tags: [dashboard]
-      summary: Datos de stock
+      summary: Stock bajo (productos con menor stock)
       responses:
         '200':
-          description: Datos de stock
+          description: Array plano
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ChartStockRow'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: Sin permiso charts.read
 
   /charts/trends:
     get:
       tags: [dashboard]
-      summary: Datos de tendencias
+      summary: Tendencias diarias (ingresos por día desde órdenes)
       responses:
         '200':
-          description: Datos de tendencias
+          description: Array plano
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ChartTrendRow'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: Sin permiso charts.read

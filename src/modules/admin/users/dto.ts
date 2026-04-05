@@ -47,3 +47,8 @@ export const listUsersQueryDto = z.object({
 export const userIdParamDto = z.object({
   id: uuidSchema,
 });
+
+/** Contrato front: `PUT /admin/users/:id/password` */
+export const changePasswordDto = z.object({
+  newPassword: z.string().min(8).max(100),
+});

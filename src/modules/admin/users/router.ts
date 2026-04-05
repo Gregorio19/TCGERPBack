@@ -7,6 +7,7 @@ import {
   updateUserDto,
   listUsersQueryDto,
   userIdParamDto,
+  changePasswordDto,
 } from './dto.js';
 import { userService } from './service.js';
 import { ok, created, noContent } from '../../../lib/responses.js';
@@ -63,6 +64,20 @@ usersRouter.get(
   async (c) => {
     const { id } = (c as any).get('validatedParams') as { id: string };
     const user = await userService.getById(id);
+    return ok(c, user);
+  }
+);
+
+usersRouter.put(
+  '/:id/password',
+  authJWT,
+  rbacGuard,
+  validateParams(userIdParamDto),
+  validateBody(changePasswordDto),
+  async (c) => {
+    const { id } = (c as any).get('validatedParams') as { id: string };
+    const { newPassword } = (c as any).get('validatedBody') as z.infer<typeof changePasswordDto>;
+    const user = await userService.changePassword(id, newPassword);
     return ok(c, user);
   }
 );

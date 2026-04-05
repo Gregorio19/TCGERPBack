@@ -108,6 +108,18 @@ export const userService = {
     return mapUsuario(user);
   },
 
+  async changePassword(id: string, newPassword: string) {
+    const user = await db.user.findUnique({ where: { id } });
+    if (!user || user.deletedAt) {
+      throw new AppError(ErrorCodes.USER_NOT_FOUND, 'Usuario no encontrado', 404);
+    }
+    await db.user.update({
+      where: { id },
+      data: { passwordHash: await hashPassword(newPassword) },
+    });
+    return this.getById(id);
+  },
+
   async create(data: {
     username: string;
     email: string;
