@@ -17,7 +17,8 @@
         "reports": { "read": true, "generate": true, "export": true },
         "forecast": { "read": true, "calculate": true, "configure": true },
         "dashboard": { "read": true },
-        "charts": { "read": true }
+        "charts": { "read": true },
+        "pos": { "read": true, "create": true }
       }
     },
     "Cajero": {
@@ -34,7 +35,8 @@
         "reports": { "read": true, "generate": false, "export": false },
         "forecast": { "read": false, "calculate": false, "configure": false },
         "dashboard": { "read": true },
-        "charts": { "read": true }
+        "charts": { "read": true },
+        "pos": { "read": true, "create": true }
       }
     },
     "Bodeguero": {
@@ -54,7 +56,8 @@
         "reports": { "read": true, "generate": false, "export": false },
         "forecast": { "read": false, "calculate": false, "configure": false },
         "dashboard": { "read": true },
-        "charts": { "read": true }
+        "charts": { "read": true },
+        "pos": { "read": true, "create": false }
       }
     },
     "Contador": {
@@ -71,7 +74,8 @@
         "reports": { "read": true, "generate": true, "export": true },
         "forecast": { "read": false, "calculate": false, "configure": false },
         "dashboard": { "read": true },
-        "charts": { "read": true }
+        "charts": { "read": true },
+        "pos": { "read": true, "create": false }
       }
     },
     "RRHH": {
@@ -88,7 +92,8 @@
         "reports": { "read": true, "generate": true, "export": true },
         "forecast": { "read": false, "calculate": false, "configure": false },
         "dashboard": { "read": true },
-        "charts": { "read": true }
+        "charts": { "read": true },
+        "pos": { "read": false, "create": false }
       }
     },
     "Viewer": {
@@ -108,7 +113,8 @@
         "reports": { "read": true, "generate": false, "export": false },
         "forecast": { "read": true, "calculate": false, "configure": false },
         "dashboard": { "read": true },
-        "charts": { "read": true }
+        "charts": { "read": true },
+        "pos": { "read": true, "create": false }
       }
     },
     "doctor": {
@@ -128,7 +134,8 @@
         "reports": { "read": true, "generate": false, "export": false },
         "forecast": { "read": true, "calculate": false, "configure": false },
         "dashboard": { "read": true },
-        "charts": { "read": true }
+        "charts": { "read": true },
+        "pos": { "read": true, "create": false }
       }
     }
   },
@@ -147,7 +154,8 @@
     "reports": "Reportes y estadísticas",
     "forecast": "Proyecciones y forecast",
     "dashboard": "KPIs y resumen home",
-    "charts": "Gráficos del dashboard"
+    "charts": "Gráficos del dashboard",
+    "pos": "Punto de venta (productos y venta rápida)"
   },
   "actions": {
     "create": "Crear nuevo recurso",

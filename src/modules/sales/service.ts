@@ -79,6 +79,18 @@ function validateStateTransition(currentState: OrderStatus, newState: OrderStatu
   return validTransitions[currentState]?.includes(newState) ?? false;
 }
 
+/** Misma regla que dashboard: ventas que cuentan en KPIs. */
+const EXCLUDED_FROM_SALES_KPI: OrderStatus[] = [
+  OrderStatus.cancelada,
+  OrderStatus.reembolsada,
+  OrderStatus.devuelta,
+];
+
+const orderCountedWhere: Prisma.OrderWhereInput = {
+  deletedAt: null,
+  estado: { notIn: EXCLUDED_FROM_SALES_KPI },
+};
+
 export const orderService = {
   async list(params: PaginationParams & {
     estado?: string;
@@ -565,6 +577,87 @@ export const orderService = {
     }
 
     return timeline.sort((a, b) => a.fecha.getTime() - b.fecha.getTime());
+  },
+
+  /** KPIs agregados para `GET /sales/stats` (órdenes no canceladas/reembolsadas/devueltas). */
+  async salesStats() {
+    const [agg, count] = await Promise.all([
+      db.order.aggregate({
+        where: orderCountedWhere,
+        _sum: { total: true },
+        _avg: { total: true },
+      }),
+      db.order.count({ where: orderCountedWhere }),
+    ]);
+    return {
+      totalVentas: agg._sum.total ?? 0,
+      cantidadPedidos: count,
+      ticketPromedio: Math.round(agg._avg.total ?? 0),
+    };
+  },
+
+  /** Serie mensual (últimos `months`) en CLP. */
+  async salesMonthly(months = 12) {
+    const out: { mes: string; ventas: number }[] = [];
+    const now = new Date();
+    for (let i = months - 1; i >= 0; i--) {
+      const ref = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1));
+      const start = new Date(Date.UTC(ref.getUTCFullYear(), ref.getUTCMonth(), 1, 0, 0, 0, 0));
+      const end = new Date(Date.UTC(ref.getUTCFullYear(), ref.getUTCMonth() + 1, 0, 23, 59, 59, 999));
+      const sum = await db.order.aggregate({
+        where: {
+          ...orderCountedWhere,
+          fechaCreacion: { gte: start, lte: end },
+        },
+        _sum: { total: true },
+      });
+      out.push({
+        mes: `${ref.getUTCFullYear()}-${String(ref.getUTCMonth() + 1).padStart(2, '0')}`,
+        ventas: sum._sum.total ?? 0,
+      });
+    }
+    return out;
+  },
+
+  async salesRecent(limit: number) {
+    const rows = await db.order.findMany({
+      where: orderCountedWhere,
+      orderBy: { fechaCreacion: 'desc' },
+      take: Math.min(Math.max(limit, 1), 50),
+      include: { cliente: { select: { nombre: true, apellido: true } } },
+    });
+    return rows.map((o) => ({
+      id: o.id,
+      numero: o.numero,
+      cliente: `${o.cliente.nombre} ${o.cliente.apellido}`.trim(),
+      total: o.total,
+      estado: o.estado,
+      fecha: o.fechaCreacion.toISOString(),
+    }));
+  },
+
+  async topCustomers(limit: number) {
+    const grouped = await db.order.groupBy({
+      by: ['clienteId'],
+      where: orderCountedWhere,
+      _sum: { total: true },
+      orderBy: { _sum: { total: 'desc' } },
+      take: Math.min(Math.max(limit, 1), 25),
+    });
+    const ids = grouped.map((g) => g.clienteId);
+    const customers = await db.customer.findMany({
+      where: { id: { in: ids }, deletedAt: null },
+      select: { id: true, nombre: true, apellido: true },
+    });
+    const map = new Map(customers.map((c) => [c.id, c]));
+    return grouped.map((g) => {
+      const c = map.get(g.clienteId);
+      return {
+        clienteId: g.clienteId,
+        nombre: c ? `${c.nombre} ${c.apellido}`.trim() : g.clienteId,
+        totalCompras: g._sum.total ?? 0,
+      };
+    });
   },
 };
 

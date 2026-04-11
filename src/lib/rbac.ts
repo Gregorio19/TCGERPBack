@@ -101,12 +101,26 @@ export const mapPathToResource = (path: string, method: string): { resource: str
     return { resource: 'rrhh', action: 'process_payroll' };
   }
 
+  if (resource === 'reports' && pathParts.includes('export')) {
+    return { resource: 'reports', action: 'export' };
+  }
+
   if (resource === 'reports' && method === 'POST') {
     return { resource: 'reports', action: 'generate' };
   }
 
-  if (resource === 'forecast' && method === 'POST') {
-    return { resource: 'forecast', action: 'calculate' };
+  if (resource === 'forecast' && pathParts.includes('configuracion')) {
+    if (method === 'GET') {
+      return { resource: 'forecast', action: 'read' };
+    }
+    return { resource: 'forecast', action: 'configure' };
+  }
+
+  if (resource === 'forecast' && method === 'POST' && !pathParts.includes('configuracion')) {
+    const calcPaths = ['calculate', 'productos-top', 'sets-top', 'grafico', 'comparar-metodos', 'exportar', 'validar-configuracion', 'metricas'];
+    if (calcPaths.some((p) => pathParts.includes(p))) {
+      return { resource: 'forecast', action: 'calculate' };
+    }
   }
 
   return { resource, action };

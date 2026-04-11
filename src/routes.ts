@@ -13,6 +13,9 @@ import { proveedoresRouter } from './modules/proveedores/router.js';
 import { transferenciasRouter } from './modules/transferencias/router.js';
 import { dashboardRouter } from './modules/dashboard/router.js';
 import { chartsRouter } from './modules/charts/router.js';
+import { reportsRouter } from './modules/reports/router.js';
+import { forecastRouter } from './modules/forecast/router.js';
+import { posRouter } from './modules/pos/router.js';
 
 export const routes = new Hono();
 
@@ -33,3 +36,6 @@ routes.route('/transferencias', transferenciasRouter);
 routes.route('/proveedores', proveedoresRouter);
 routes.route('/dashboard', dashboardRouter);
 routes.route('/charts', chartsRouter);
+routes.route('/reports', reportsRouter);
+routes.route('/forecast', forecastRouter);
+routes.route('/pos', posRouter);

@@ -1,0 +1,45 @@
+-- DropIndex
+DROP INDEX "payrolls_employee_id_idx";
+
+-- CreateTable
+CREATE TABLE "refresh_tokens" (
+    "id" TEXT NOT NULL,
+    "token" VARCHAR(500) NOT NULL,
+    "user_id" TEXT NOT NULL,
+    "expires_at" TIMESTAMP(3) NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "refresh_tokens_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "generated_reports" (
+    "id" TEXT NOT NULL,
+    "tipo" VARCHAR(80) NOT NULL,
+    "titulo" VARCHAR(300),
+    "estado" VARCHAR(40) NOT NULL DEFAULT 'completado',
+    "parametros" JSONB,
+    "resultado" TEXT,
+    "formato" VARCHAR(20),
+    "created_by_id" TEXT,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+    "deleted_at" TIMESTAMP(3),
+
+    CONSTRAINT "generated_reports_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateIndex
+CREATE UNIQUE INDEX "refresh_tokens_token_key" ON "refresh_tokens"("token");
+
+-- CreateIndex
+CREATE INDEX "refresh_tokens_user_id_idx" ON "refresh_tokens"("user_id");
+
+-- CreateIndex
+CREATE INDEX "generated_reports_tipo_idx" ON "generated_reports"("tipo");
+
+-- CreateIndex
+CREATE INDEX "generated_reports_created_at_idx" ON "generated_reports"("created_at");
+
+-- AddForeignKey
+ALTER TABLE "refresh_tokens" ADD CONSTRAINT "refresh_tokens_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;

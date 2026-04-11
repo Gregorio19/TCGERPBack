@@ -93,3 +93,15 @@ export const customerIdParamDto = z.object({
   id: uuidSchema,
 });
 
+/** Visita/nota: texto largo tal cual (sin trim); fecha del hecho opcional (ISO 8601). */
+export const createCustomerVisitDto = z.object({
+  descripcion: z.string().min(1).max(50000),
+  fecha: z.string().datetime({ offset: true }).optional(),
+});
+
+export const listCustomerVisitsQueryDto = z.object({
+  page: z.string().optional(),
+  limit: z.string().optional(),
+  pageSize: z.string().optional(),
+});
+

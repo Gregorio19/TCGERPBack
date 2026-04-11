@@ -7,6 +7,8 @@ import {
   updateCustomerDto,
   listCustomersQueryDto,
   customerIdParamDto,
+  createCustomerVisitDto,
+  listCustomerVisitsQueryDto,
 } from './dto.js';
 import { customerService } from './service.js';
 import { ok, created, noContent } from '../../lib/responses.js';
@@ -62,6 +64,43 @@ customersRouter.post(
     const data = (c as any).get('validatedBody') as z.infer<typeof createCustomerDto>;
     const customer = await customerService.create(data);
     return created(c, mapCustomer(customer));
+  }
+);
+
+// Historial de visitas / notas (antes de GET /:id por convención de rutas)
+customersRouter.get(
+  '/:id/visits',
+  optionalAuth,
+  validateParams(customerIdParamDto),
+  validateQuery(listCustomerVisitsQueryDto),
+  async (c) => {
+    const { id } = (c as any).get('validatedParams') as { id: string };
+    const query = (c as any).get('validatedQuery') as z.infer<typeof listCustomerVisitsQueryDto>;
+    const queryRecord: Record<string, string | undefined> = {};
+    if (query.page) queryRecord.page = query.page;
+    if (query.limit) queryRecord.limit = query.limit;
+    if (query.pageSize) queryRecord.pageSize = query.pageSize;
+    const pagination = parsePagination(queryRecord);
+    const result = await customerService.listVisits(id, pagination);
+    return ok(c, result);
+  }
+);
+
+customersRouter.post(
+  '/:id/visits',
+  authJWT,
+  rbacGuard,
+  validateParams(customerIdParamDto),
+  validateBody(createCustomerVisitDto),
+  async (c) => {
+    const { id } = (c as any).get('validatedParams') as { id: string };
+    const body = (c as any).get('validatedBody') as z.infer<typeof createCustomerVisitDto>;
+    const user = (c as { get: (k: string) => unknown }).get('user') as { userId: string };
+    const visit = await customerService.createVisit(id, user.userId, {
+      descripcion: body.descripcion,
+      ...(body.fecha !== undefined && { fecha: new Date(body.fecha) }),
+    });
+    return created(c, visit);
   }
 );
 

@@ -267,11 +267,31 @@ model Customer {
 
   // Relations
   orders          Order[]
+  visits          CustomerVisit[]
 
   @@index([email])
   @@index([rut])
   @@index([estado])
   @@map("customers")
+}
+
+/// Historial de visitas / notas por cliente (texto largo tal cual, fecha del hecho, autor).
+model CustomerVisit {
+  id           String   @id @default(uuid())
+  customerId   String   @map("customer_id")
+  fecha        DateTime
+  descripcion  String   @db.Text
+  usuarioId    String   @map("usuario_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  usuario  User     @relation(fields: [usuarioId], references: [id], onDelete: Restrict)
+
+  @@index([customerId])
+  @@index([fecha])
+  @@index([usuarioId])
+  @@map("customer_visits")
 }
 
 model Order {
@@ -716,11 +736,44 @@ model User {
   // Relations
   sucursal    Branch   @relation(fields: [sucursalId], references: [id])
   userRoles   UserRole[]
+  refreshTokens RefreshToken[]
+  customerVisits CustomerVisit[]
 
   @@index([username])
   @@index([email])
   @@index([sucursalId])
   @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique @db.VarChar(500)
+  userId    String   @map("user_id")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model GeneratedReport {
+  id          String    @id @default(uuid())
+  tipo        String    @db.VarChar(80)
+  titulo      String?   @db.VarChar(300)
+  estado      String    @default("completado") @db.VarChar(40)
+  parametros  Json?
+  resultado   String?   @db.Text
+  formato     String?   @db.VarChar(20)
+  createdById String?   @map("created_by_id")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+
+  @@index([tipo])
+  @@index([createdAt])
+  @@map("generated_reports")
 }
 
 model Role {

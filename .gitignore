@@ -66,6 +66,13 @@ Thumbs.db
 # TypeScript
 *.tsbuildinfo
 
+# Documentación (todo el árbol; no versionar)
+Documentancion/
+documentacion/
+
+# Comunicación / prompts IA (local)
+comunicacion-ia/
+
 # Vercel
 .vercel
 

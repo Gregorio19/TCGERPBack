@@ -347,5 +347,77 @@ export const customerService = {
       lastOrderDate: lastOrderDate?.fechaCreacion || null,
     };
   },
+
+  async listVisits(customerId: string, params: PaginationParams) {
+    await this.getById(customerId);
+    const { page, pageSize } = params;
+
+    const where = { customerId };
+
+    const [rows, total] = await Promise.all([
+      db.customerVisit.findMany({
+        where,
+        orderBy: { fecha: 'desc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        include: {
+          usuario: {
+            select: { nombre: true, username: true },
+          },
+        },
+      }),
+      db.customerVisit.count({ where }),
+    ]);
+
+    const data = rows.map((v) => ({
+      id: v.id,
+      customerId: v.customerId,
+      fecha: v.fecha,
+      descripcion: v.descripcion,
+      createdAt: v.createdAt,
+      updatedAt: v.updatedAt,
+      usuario: {
+        nombre: v.usuario.nombre,
+        username: v.usuario.username,
+      },
+    }));
+
+    return buildPaginatedResponse(data, total, page, pageSize);
+  },
+
+  async createVisit(
+    customerId: string,
+    usuarioId: string,
+    data: { descripcion: string; fecha?: Date }
+  ) {
+    await this.getById(customerId);
+
+    const visit = await db.customerVisit.create({
+      data: {
+        customerId,
+        usuarioId,
+        descripcion: data.descripcion,
+        fecha: data.fecha ?? new Date(),
+      },
+      include: {
+        usuario: {
+          select: { nombre: true, username: true },
+        },
+      },
+    });
+
+    return {
+      id: visit.id,
+      customerId: visit.customerId,
+      fecha: visit.fecha,
+      descripcion: visit.descripcion,
+      createdAt: visit.createdAt,
+      updatedAt: visit.updatedAt,
+      usuario: {
+        nombre: visit.usuario.nombre,
+        username: visit.usuario.username,
+      },
+    };
+  },
 };
 
