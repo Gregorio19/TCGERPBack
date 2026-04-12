@@ -30,6 +30,9 @@
   ],
   "author": "",
   "license": "ISC",
+  "engines": {
+    "node": ">=20"
+  },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
   },
