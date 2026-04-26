@@ -41,6 +41,172 @@ export const employeeIdParamDto = z.object({
   id: z.string().uuid(),
 });
 
+const hhmmSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Hora debe ser HH:mm');
+const yyyyMmDdSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Fecha debe ser YYYY-MM-DD');
+
+export const scheduleTemplateIdParamDto = z.object({
+  templateId: z.string().uuid(),
+});
+
+export const scheduleExceptionIdParamDto = z.object({
+  exceptionId: z.string().uuid(),
+});
+
+export const createScheduleTemplateDto = z
+  .object({
+    dayOfWeek: z.number().int().min(0).max(6),
+    startTime: hhmmSchema,
+    endTime: hhmmSchema,
+    effectiveFrom: yyyyMmDdSchema,
+    effectiveTo: yyyyMmDdSchema.optional().nullable(),
+    isActive: z.boolean().optional(),
+  })
+  .superRefine((val, ctx) => {
+    if (val.startTime >= val.endTime) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['endTime'],
+        message: 'endTime debe ser mayor a startTime',
+      });
+    }
+    if (val.effectiveTo && val.effectiveTo < val.effectiveFrom) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['effectiveTo'],
+        message: 'effectiveTo no puede ser menor que effectiveFrom',
+      });
+    }
+  });
+
+export const updateScheduleTemplateDto = z
+  .object({
+    dayOfWeek: z.number().int().min(0).max(6).optional(),
+    startTime: hhmmSchema.optional(),
+    endTime: hhmmSchema.optional(),
+    effectiveFrom: yyyyMmDdSchema.optional(),
+    effectiveTo: yyyyMmDdSchema.optional().nullable(),
+    isActive: z.boolean().optional(),
+  })
+  .superRefine((val, ctx) => {
+    if (val.startTime && val.endTime && val.startTime >= val.endTime) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['endTime'],
+        message: 'endTime debe ser mayor a startTime',
+      });
+    }
+  });
+
+export const listScheduleTemplatesQueryDto = z.object({
+  dayOfWeek: z.coerce.number().int().min(0).max(6).optional(),
+  isActive: z
+    .enum(['true', 'false'])
+    .transform((v) => v === 'true')
+    .optional(),
+});
+
+export const listScheduleExceptionsQueryDto = z
+  .object({
+    from: yyyyMmDdSchema,
+    to: yyyyMmDdSchema,
+  })
+  .superRefine((val, ctx) => {
+    if (val.to < val.from) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['to'],
+        message: 'to no puede ser menor que from',
+      });
+    }
+  });
+
+export const scheduleCalendarQueryDto = listScheduleExceptionsQueryDto;
+
+export const scheduleCalendarBulkQueryDto = z
+  .object({
+    from: yyyyMmDdSchema,
+    to: yyyyMmDdSchema,
+    estado: z.enum(['activo', 'inactivo', 'suspendido', 'licencia']).optional(),
+    employeeIds: z
+      .string()
+      .transform((v) => v.split(',').map((x) => x.trim()).filter(Boolean))
+      .optional(),
+    branchId: z.string().uuid().optional(),
+  })
+  .superRefine((val, ctx) => {
+    if (val.to < val.from) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['to'],
+        message: 'to no puede ser menor que from',
+      });
+    }
+  });
+
+export const createScheduleExceptionDto = z
+  .object({
+    date: yyyyMmDdSchema,
+    type: z.enum(['override', 'off']),
+    startTime: hhmmSchema.optional(),
+    endTime: hhmmSchema.optional(),
+    note: z.string().max(500).optional(),
+  })
+  .superRefine((val, ctx) => {
+    if (val.type === 'off') {
+      if (val.startTime || val.endTime) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['startTime'],
+          message: 'En type=off no se permiten startTime/endTime',
+        });
+      }
+      return;
+    }
+    if (!val.startTime || !val.endTime) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['startTime'],
+        message: 'En type=override startTime y endTime son obligatorios',
+      });
+      return;
+    }
+    if (val.startTime >= val.endTime) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['endTime'],
+        message: 'endTime debe ser mayor a startTime',
+      });
+    }
+  });
+
+export const updateScheduleExceptionDto = z
+  .object({
+    date: yyyyMmDdSchema.optional(),
+    type: z.enum(['override', 'off']).optional(),
+    startTime: hhmmSchema.optional(),
+    endTime: hhmmSchema.optional(),
+    note: z.string().max(500).optional(),
+  })
+  .superRefine((val, ctx) => {
+    if (val.type === 'off') {
+      if (val.startTime || val.endTime) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['startTime'],
+          message: 'En type=off no se permiten startTime/endTime',
+        });
+      }
+      return;
+    }
+    if (val.startTime && val.endTime && val.startTime >= val.endTime) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['endTime'],
+        message: 'endTime debe ser mayor a startTime',
+      });
+    }
+  });
+
 export const createEmployeeDto = z.object({
   rut: z.string().min(1),
   nombre: z.string().min(1),

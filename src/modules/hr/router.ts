@@ -12,6 +12,16 @@ import {
   employeeIdParamDto,
   createEmployeeDto,
   updateEmployeeDto,
+  createScheduleTemplateDto,
+  updateScheduleTemplateDto,
+  listScheduleTemplatesQueryDto,
+  createScheduleExceptionDto,
+  updateScheduleExceptionDto,
+  listScheduleExceptionsQueryDto,
+  scheduleCalendarQueryDto,
+  scheduleCalendarBulkQueryDto,
+  scheduleTemplateIdParamDto,
+  scheduleExceptionIdParamDto,
   listContractsQueryDto,
   contractIdParamDto,
   empleadoIdContractParamDto,
@@ -126,6 +136,179 @@ hrRouter.delete(
     };
     await hrService.deleteEmployee(id);
     return c.json(hrDeleted('Empleado eliminado'));
+  }
+);
+
+// --- Horarios de empleados ---
+hrRouter.post(
+  '/employees/:id/schedules/templates',
+  authJWT,
+  rbacGuard,
+  validateParams(employeeIdParamDto),
+  validateBody(createScheduleTemplateDto),
+  async (c) => {
+    const { id } = (c as unknown as { get: (k: string) => unknown }).get('validatedParams') as {
+      id: string;
+    };
+    const body = (c as unknown as { get: (k: string) => unknown }).get('validatedBody') as z.infer<
+      typeof createScheduleTemplateDto
+    >;
+    const data = await hrService.createScheduleTemplate(id, body);
+    return c.json(hrEnvelope(data, 'Bloque horario creado'), 201);
+  }
+);
+
+hrRouter.get(
+  '/employees/:id/schedules/templates',
+  optionalAuth,
+  validateParams(employeeIdParamDto),
+  validateQuery(listScheduleTemplatesQueryDto),
+  async (c) => {
+    const { id } = (c as unknown as { get: (k: string) => unknown }).get('validatedParams') as {
+      id: string;
+    };
+    const query = (c as unknown as { get: (k: string) => unknown }).get('validatedQuery') as z.infer<
+      typeof listScheduleTemplatesQueryDto
+    >;
+    const data = await hrService.listScheduleTemplates(id, query);
+    return c.json(hrEnvelope(data));
+  }
+);
+
+hrRouter.put(
+  '/schedules/templates/:templateId',
+  authJWT,
+  rbacGuard,
+  validateParams(scheduleTemplateIdParamDto),
+  validateBody(updateScheduleTemplateDto),
+  async (c) => {
+    const { templateId } = (c as unknown as { get: (k: string) => unknown }).get(
+      'validatedParams'
+    ) as {
+      templateId: string;
+    };
+    const body = (c as unknown as { get: (k: string) => unknown }).get('validatedBody') as z.infer<
+      typeof updateScheduleTemplateDto
+    >;
+    const data = await hrService.updateScheduleTemplate(templateId, body);
+    return c.json(hrEnvelope(data));
+  }
+);
+
+hrRouter.delete(
+  '/schedules/templates/:templateId',
+  authJWT,
+  rbacGuard,
+  validateParams(scheduleTemplateIdParamDto),
+  async (c) => {
+    const { templateId } = (c as unknown as { get: (k: string) => unknown }).get(
+      'validatedParams'
+    ) as {
+      templateId: string;
+    };
+    await hrService.deleteScheduleTemplate(templateId);
+    return c.json(hrDeleted('Bloque horario eliminado'));
+  }
+);
+
+hrRouter.post(
+  '/employees/:id/schedules/exceptions',
+  authJWT,
+  rbacGuard,
+  validateParams(employeeIdParamDto),
+  validateBody(createScheduleExceptionDto),
+  async (c) => {
+    const { id } = (c as unknown as { get: (k: string) => unknown }).get('validatedParams') as {
+      id: string;
+    };
+    const body = (c as unknown as { get: (k: string) => unknown }).get('validatedBody') as z.infer<
+      typeof createScheduleExceptionDto
+    >;
+    const data = await hrService.createScheduleException(id, body);
+    return c.json(hrEnvelope(data, 'Excepción de horario creada'), 201);
+  }
+);
+
+hrRouter.get(
+  '/employees/:id/schedules/exceptions',
+  optionalAuth,
+  validateParams(employeeIdParamDto),
+  validateQuery(listScheduleExceptionsQueryDto),
+  async (c) => {
+    const { id } = (c as unknown as { get: (k: string) => unknown }).get('validatedParams') as {
+      id: string;
+    };
+    const query = (c as unknown as { get: (k: string) => unknown }).get('validatedQuery') as z.infer<
+      typeof listScheduleExceptionsQueryDto
+    >;
+    const data = await hrService.listScheduleExceptions(id, query);
+    return c.json(hrEnvelope(data));
+  }
+);
+
+hrRouter.put(
+  '/schedules/exceptions/:exceptionId',
+  authJWT,
+  rbacGuard,
+  validateParams(scheduleExceptionIdParamDto),
+  validateBody(updateScheduleExceptionDto),
+  async (c) => {
+    const { exceptionId } = (c as unknown as { get: (k: string) => unknown }).get(
+      'validatedParams'
+    ) as {
+      exceptionId: string;
+    };
+    const body = (c as unknown as { get: (k: string) => unknown }).get('validatedBody') as z.infer<
+      typeof updateScheduleExceptionDto
+    >;
+    const data = await hrService.updateScheduleException(exceptionId, body);
+    return c.json(hrEnvelope(data));
+  }
+);
+
+hrRouter.delete(
+  '/schedules/exceptions/:exceptionId',
+  authJWT,
+  rbacGuard,
+  validateParams(scheduleExceptionIdParamDto),
+  async (c) => {
+    const { exceptionId } = (c as unknown as { get: (k: string) => unknown }).get(
+      'validatedParams'
+    ) as {
+      exceptionId: string;
+    };
+    await hrService.deleteScheduleException(exceptionId);
+    return c.json(hrDeleted('Excepción de horario eliminada'));
+  }
+);
+
+hrRouter.get(
+  '/employees/:id/schedules/calendar',
+  optionalAuth,
+  validateParams(employeeIdParamDto),
+  validateQuery(scheduleCalendarQueryDto),
+  async (c) => {
+    const { id } = (c as unknown as { get: (k: string) => unknown }).get('validatedParams') as {
+      id: string;
+    };
+    const query = (c as unknown as { get: (k: string) => unknown }).get('validatedQuery') as z.infer<
+      typeof scheduleCalendarQueryDto
+    >;
+    const data = await hrService.getEmployeeCalendar(id, query.from, query.to);
+    return c.json(hrEnvelope(data));
+  }
+);
+
+hrRouter.get(
+  '/schedules/calendar',
+  optionalAuth,
+  validateQuery(scheduleCalendarBulkQueryDto),
+  async (c) => {
+    const query = (c as unknown as { get: (k: string) => unknown }).get('validatedQuery') as z.infer<
+      typeof scheduleCalendarBulkQueryDto
+    >;
+    const data = await hrService.getSchedulesCalendarBulk(query);
+    return c.json(hrEnvelope(data));
   }
 );
 

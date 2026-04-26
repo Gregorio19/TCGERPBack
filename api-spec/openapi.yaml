@@ -778,6 +778,270 @@ components:
         previsional:
           $ref: '#/components/schemas/RrhhPrevisional'
 
+    RrhhScheduleExceptionType:
+      type: string
+      enum: [override, off]
+
+    RrhhScheduleTemplate:
+      type: object
+      required:
+        - id
+        - employeeId
+        - dayOfWeek
+        - startTime
+        - endTime
+        - isActive
+        - effectiveFrom
+        - createdAt
+        - updatedAt
+      properties:
+        id: { type: string, format: uuid }
+        employeeId: { type: string, format: uuid }
+        dayOfWeek:
+          type: integer
+          minimum: 0
+          maximum: 6
+          description: lunes=0 ... domingo=6
+        startTime:
+          type: string
+          pattern: '^([01]\\d|2[0-3]):[0-5]\\d$'
+          example: '09:00'
+        endTime:
+          type: string
+          pattern: '^([01]\\d|2[0-3]):[0-5]\\d$'
+          example: '18:00'
+        isActive: { type: boolean }
+        effectiveFrom: { type: string, format: date }
+        effectiveTo:
+          type: string
+          format: date
+          nullable: true
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    RrhhCreateScheduleTemplate:
+      type: object
+      required: [dayOfWeek, startTime, endTime, effectiveFrom]
+      properties:
+        dayOfWeek:
+          type: integer
+          minimum: 0
+          maximum: 6
+          description: lunes=0 ... domingo=6
+        startTime:
+          type: string
+          pattern: '^([01]\\d|2[0-3]):[0-5]\\d$'
+        endTime:
+          type: string
+          pattern: '^([01]\\d|2[0-3]):[0-5]\\d$'
+        effectiveFrom:
+          type: string
+          format: date
+        effectiveTo:
+          type: string
+          format: date
+          nullable: true
+        isActive:
+          type: boolean
+          default: true
+
+    RrhhUpdateScheduleTemplate:
+      type: object
+      properties:
+        dayOfWeek:
+          type: integer
+          minimum: 0
+          maximum: 6
+        startTime:
+          type: string
+          pattern: '^([01]\\d|2[0-3]):[0-5]\\d$'
+        endTime:
+          type: string
+          pattern: '^([01]\\d|2[0-3]):[0-5]\\d$'
+        effectiveFrom:
+          type: string
+          format: date
+        effectiveTo:
+          type: string
+          format: date
+          nullable: true
+        isActive:
+          type: boolean
+
+    RrhhScheduleException:
+      type: object
+      required:
+        - id
+        - employeeId
+        - date
+        - type
+        - createdAt
+        - updatedAt
+      properties:
+        id: { type: string, format: uuid }
+        employeeId: { type: string, format: uuid }
+        date: { type: string, format: date }
+        type:
+          $ref: '#/components/schemas/RrhhScheduleExceptionType'
+        startTime:
+          type: string
+          pattern: '^([01]\\d|2[0-3]):[0-5]\\d$'
+          nullable: true
+        endTime:
+          type: string
+          pattern: '^([01]\\d|2[0-3]):[0-5]\\d$'
+          nullable: true
+        note:
+          type: string
+          nullable: true
+          maxLength: 500
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    RrhhCreateScheduleException:
+      type: object
+      required: [date, type]
+      properties:
+        date: { type: string, format: date }
+        type:
+          $ref: '#/components/schemas/RrhhScheduleExceptionType'
+        startTime:
+          type: string
+          pattern: '^([01]\\d|2[0-3]):[0-5]\\d$'
+        endTime:
+          type: string
+          pattern: '^([01]\\d|2[0-3]):[0-5]\\d$'
+        note:
+          type: string
+          maxLength: 500
+
+    RrhhUpdateScheduleException:
+      type: object
+      properties:
+        date: { type: string, format: date }
+        type:
+          $ref: '#/components/schemas/RrhhScheduleExceptionType'
+        startTime:
+          type: string
+          pattern: '^([01]\\d|2[0-3]):[0-5]\\d$'
+        endTime:
+          type: string
+          pattern: '^([01]\\d|2[0-3]):[0-5]\\d$'
+        note:
+          type: string
+          maxLength: 500
+
+    RrhhCalendarBlock:
+      type: object
+      required: [startTime, endTime]
+      properties:
+        startTime:
+          type: string
+          pattern: '^([01]\\d|2[0-3]):[0-5]\\d$'
+        endTime:
+          type: string
+          pattern: '^([01]\\d|2[0-3]):[0-5]\\d$'
+
+    RrhhCalendarDay:
+      type: object
+      required: [date, employeeId, isOff, blocks, source]
+      properties:
+        date: { type: string, format: date }
+        employeeId: { type: string, format: uuid }
+        isOff: { type: boolean }
+        blocks:
+          type: array
+          items:
+            $ref: '#/components/schemas/RrhhCalendarBlock'
+        source:
+          type: string
+          enum: [template, exception_override, exception_off]
+        note:
+          type: string
+          nullable: true
+
+    RrhhEnvelopeScheduleTemplate:
+      allOf:
+        - $ref: '#/components/schemas/RrhhApiEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/RrhhScheduleTemplate'
+
+    RrhhEnvelopeScheduleTemplatesLista:
+      allOf:
+        - $ref: '#/components/schemas/RrhhApiEnvelope'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/RrhhScheduleTemplate'
+
+    RrhhEnvelopeScheduleException:
+      allOf:
+        - $ref: '#/components/schemas/RrhhApiEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/RrhhScheduleException'
+
+    RrhhEnvelopeScheduleExceptionsLista:
+      allOf:
+        - $ref: '#/components/schemas/RrhhApiEnvelope'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/RrhhScheduleException'
+
+    RrhhEnvelopeScheduleCalendar:
+      allOf:
+        - $ref: '#/components/schemas/RrhhApiEnvelope'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/RrhhCalendarDay'
+
+    RrhhBulkScheduleEmployee:
+      type: object
+      required: [employeeId, employee, days]
+      properties:
+        employeeId:
+          type: string
+          format: uuid
+        employee:
+          type: object
+          required: [id, nombre, apellidoPaterno, apellidoMaterno, estado]
+          properties:
+            id: { type: string, format: uuid }
+            nombre: { type: string }
+            apellidoPaterno: { type: string }
+            apellidoMaterno: { type: string }
+            estado:
+              type: string
+              enum: [activo, inactivo, suspendido, licencia]
+            cargo:
+              $ref: '#/components/schemas/RrhhCargo'
+              nullable: true
+        days:
+          type: array
+          items:
+            $ref: '#/components/schemas/RrhhCalendarDay'
+
+    RrhhEnvelopeScheduleCalendarBulk:
+      allOf:
+        - $ref: '#/components/schemas/RrhhApiEnvelope'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/RrhhBulkScheduleEmployee'
+
     RrhhEstadisticas:
       type: object
       required:
@@ -1878,6 +2142,169 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ChartTrendRow'
+
+    AppointmentStatus:
+      type: string
+      enum: [tentative, confirmed, cancelled, completed, no_show]
+    AppointmentSource:
+      type: string
+      enum: [manual, web, phone, whatsapp]
+    AppointmentSlot:
+      type: object
+      required: [employeeId, startAt, endAt, durationMin, isAvailable]
+      properties:
+        employeeId:
+          type: string
+          format: uuid
+        startAt:
+          type: string
+          format: date-time
+        endAt:
+          type: string
+          format: date-time
+        durationMin:
+          type: integer
+        isAvailable:
+          type: boolean
+        reason:
+          type: string
+    AppointmentItem:
+      type: object
+      required: [id, customerId, employeeId, startAt, endAt, durationMin, status, source, customerNombre, employeeNombre, customerSnapshot, employeeSnapshot]
+      properties:
+        id:
+          type: string
+          format: uuid
+        customerId:
+          type: string
+          format: uuid
+        employeeId:
+          type: string
+          format: uuid
+        serviceTypeId:
+          type: string
+          format: uuid
+          nullable: true
+        serviceTypeName:
+          type: string
+          nullable: true
+        startAt:
+          type: string
+          format: date-time
+        endAt:
+          type: string
+          format: date-time
+        durationMin:
+          type: integer
+        status:
+          $ref: '#/components/schemas/AppointmentStatus'
+        source:
+          $ref: '#/components/schemas/AppointmentSource'
+        note:
+          type: string
+          nullable: true
+        customerNombre:
+          type: string
+          description: "Nombre y apellido del cliente, listo para mostrar en UI"
+        employeeNombre:
+          type: string
+          description: "Nombre completo del empleado, listo para mostrar en UI"
+        customerSnapshot:
+          type: object
+          required: [id, nombre, apellido, nombreCompleto]
+        employeeSnapshot:
+          type: object
+          required: [id, nombre, apellidoPaterno, apellidoMaterno, nombreCompleto, cargo]
+          properties:
+            cargo:
+              type: string
+              nullable: true
+    CreateAppointmentRequest:
+      type: object
+      required: [customerId, employeeId, startAt]
+      properties:
+        customerId:
+          type: string
+          format: uuid
+        employeeId:
+          type: string
+          format: uuid
+        serviceTypeId:
+          type: string
+          format: uuid
+        startAt:
+          type: string
+          format: date-time
+        endAt:
+          type: string
+          format: date-time
+        durationMin:
+          type: integer
+          enum: [15, 30, 45, 60]
+        source:
+          $ref: '#/components/schemas/AppointmentSource'
+        note:
+          type: string
+        status:
+          type: string
+          enum: [tentative, confirmed]
+    RescheduleAppointmentRequest:
+      type: object
+      required: [startAt]
+      properties:
+        startAt:
+          type: string
+          format: date-time
+        endAt:
+          type: string
+          format: date-time
+        durationMin:
+          type: integer
+          enum: [15, 30, 45, 60]
+        employeeId:
+          type: string
+          format: uuid
+    CancelAppointmentRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+    CreateAppointmentServiceTypeRequest:
+      type: object
+      required: [name, durationOptions]
+      properties:
+        name:
+          type: string
+        durationOptions:
+          type: array
+          items:
+            type: integer
+        bufferBeforeMin:
+          type: integer
+        bufferAfterMin:
+          type: integer
+        allowOverbooking:
+          type: boolean
+        isActive:
+          type: boolean
+    CreateAppointmentHoldRequest:
+      type: object
+      required: [employeeId, startAt, endAt]
+      properties:
+        employeeId:
+          type: string
+          format: uuid
+        startAt:
+          type: string
+          format: date-time
+        endAt:
+          type: string
+          format: date-time
+        ttlMinutes:
+          type: integer
+          minimum: 1
+          maximum: 30
 
 paths:
   # PRODUCTOS
@@ -3673,6 +4100,582 @@ paths:
                 $ref: '#/components/schemas/RrhhDeleteEnvelope'
         '404':
           $ref: '#/components/responses/NotFound'
+
+  /hr/employees/{id}/schedules/templates:
+    post:
+      tags: [rrhh]
+      summary: Crear bloque recurrente de horario
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RrhhCreateScheduleTemplate'
+      responses:
+        '201':
+          description: Bloque creado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RrhhEnvelopeScheduleTemplate'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: Sin permisos suficientes
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Error422'
+    get:
+      tags: [rrhh]
+      summary: Listar bloques de plantilla por empleado
+      security: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: dayOfWeek
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 6
+        - name: isActive
+          in: query
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Lista de bloques
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RrhhEnvelopeScheduleTemplatesLista'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Error422'
+
+  /hr/schedules/templates/{templateId}:
+    put:
+      tags: [rrhh]
+      summary: Actualizar bloque recurrente de horario
+      parameters:
+        - name: templateId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RrhhUpdateScheduleTemplate'
+      responses:
+        '200':
+          description: Bloque actualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RrhhEnvelopeScheduleTemplate'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: Sin permisos suficientes
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Error422'
+    delete:
+      tags: [rrhh]
+      summary: Eliminar bloque recurrente de horario
+      parameters:
+        - name: templateId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Eliminado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RrhhDeleteEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: Sin permisos suficientes
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /hr/employees/{id}/schedules/exceptions:
+    post:
+      tags: [rrhh]
+      summary: Crear excepción puntual de horario
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RrhhCreateScheduleException'
+      responses:
+        '201':
+          description: Excepción creada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RrhhEnvelopeScheduleException'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: Sin permisos suficientes
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Error422'
+    get:
+      tags: [rrhh]
+      summary: Listar excepciones por rango de fechas
+      security: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: from
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Lista de excepciones
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RrhhEnvelopeScheduleExceptionsLista'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Error422'
+
+  /hr/schedules/exceptions/{exceptionId}:
+    put:
+      tags: [rrhh]
+      summary: Actualizar excepción puntual de horario
+      parameters:
+        - name: exceptionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RrhhUpdateScheduleException'
+      responses:
+        '200':
+          description: Excepción actualizada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RrhhEnvelopeScheduleException'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: Sin permisos suficientes
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Error422'
+    delete:
+      tags: [rrhh]
+      summary: Eliminar excepción puntual de horario
+      parameters:
+        - name: exceptionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Eliminado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RrhhDeleteEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: Sin permisos suficientes
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /hr/employees/{id}/schedules/calendar:
+    get:
+      tags: [rrhh]
+      summary: Obtener calendario resuelto (plantilla + excepciones)
+      description: |
+        Prioridad aplicada por fecha: `exception_off` > `exception_override` > `template`.
+        Respuesta optimizada para pintar calendario en frontend con `blocks[]`.
+      security: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: from
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Calendario por día
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RrhhEnvelopeScheduleCalendar'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Error422'
+
+  /hr/schedules/calendar:
+    get:
+      tags: [rrhh]
+      summary: Obtener calendario masivo de empleados (agrupado)
+      description: |
+        Retorna calendario resuelto de todos los empleados filtrados, agrupado por empleado.
+        Útil para pintar múltiples agendas sin hacer N requests.
+      security: []
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: estado
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [activo, inactivo, suspendido, licencia]
+        - name: employeeIds
+          in: query
+          required: false
+          description: "Lista CSV de UUIDs (ej: id1,id2,id3)"
+          schema:
+            type: string
+        - name: branchId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Calendario masivo agrupado por empleado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RrhhEnvelopeScheduleCalendarBulk'
+        '422':
+          $ref: '#/components/responses/Error422'
+
+  /appointments/availability:
+    get:
+      tags: [customers]
+      summary: Obtener disponibilidad de agenda
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: durationMin
+          in: query
+          required: true
+          schema:
+            type: integer
+        - name: employeeIds
+          in: query
+          required: false
+          description: CSV UUIDs
+          schema:
+            type: string
+        - name: branchId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: serviceTypeId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Slots de disponibilidad
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AppointmentSlot'
+        '422':
+          $ref: '#/components/responses/Error422'
+
+  /appointments:
+    get:
+      tags: [customers]
+      summary: Listar citas
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date-time
+        - name: employeeId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: customerId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: status
+          in: query
+          description: CSV de estados
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Lista de citas
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AppointmentItem'
+    post:
+      tags: [customers]
+      summary: Crear cita
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAppointmentRequest'
+      responses:
+        '201':
+          description: Cita creada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppointmentItem'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Error422'
+
+  /appointments/{id}/reschedule:
+    patch:
+      tags: [customers]
+      summary: Reprogramar cita
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RescheduleAppointmentRequest'
+      responses:
+        '200':
+          description: Cita reprogramada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppointmentItem'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /appointments/{id}/cancel:
+    patch:
+      tags: [customers]
+      summary: Cancelar cita
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelAppointmentRequest'
+      responses:
+        '200':
+          description: Cita cancelada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppointmentItem'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /appointments/holds:
+    post:
+      tags: [customers]
+      summary: Crear hold temporal de agenda
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAppointmentHoldRequest'
+      responses:
+        '201':
+          description: Hold creado
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /appointments/service-types:
+    post:
+      tags: [customers]
+      summary: Crear tipo de servicio de agenda
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAppointmentServiceTypeRequest'
+      responses:
+        '201':
+          description: Tipo creado
+          content:
+            application/json:
+              schema:
+                type: object
 
   # RRHH — CONTRATOS (un contrato vigente por empleado; al crear uno nuevo el anterior pasa a respaldo)
   /hr/contracts/{id}/terminar:

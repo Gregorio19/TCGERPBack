@@ -60,6 +60,9 @@ export const mapPathToResource = (path: string, method: string): { resource: str
   if (resource === 'hr') {
     resource = 'rrhh';
   }
+  if (resource === 'appointments') {
+    resource = 'customers';
+  }
   let action = 'read';
 
   if (method === 'GET') {

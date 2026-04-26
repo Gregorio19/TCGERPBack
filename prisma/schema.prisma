@@ -172,6 +172,26 @@ enum PayrollStatus {
   cancelada
 }
 
+enum ScheduleExceptionType {
+  override
+  off
+}
+
+enum AppointmentStatus {
+  tentative
+  confirmed
+  cancelled
+  completed
+  no_show
+}
+
+enum AppointmentSource {
+  manual
+  web
+  phone
+  whatsapp
+}
+
 // Models
 model Product {
   id              Int          @id @default(autoincrement())
@@ -268,6 +288,7 @@ model Customer {
   // Relations
   orders          Order[]
   visits          CustomerVisit[]
+  appointments    Appointment[]
 
   @@index([email])
   @@index([rut])
@@ -546,12 +567,55 @@ model Employee {
   contracts         Contract[]
   payrolls          Payroll[]
   contributionSummaries EmployeeContributionSummary[]
+  scheduleTemplates EmployeeScheduleTemplate[]
+  scheduleExceptions EmployeeScheduleException[]
+  appointments      Appointment[]
+  appointmentHolds  AppointmentHold[]
+  appointmentOverbookingPolicies AppointmentOverbookingPolicy[]
 
   @@index([rut])
   @@index([email])
   @@index([estado])
   @@index([positionId])
   @@map("employees")
+}
+
+model EmployeeScheduleTemplate {
+  id           String   @id @default(uuid())
+  employeeId   String   @map("employee_id")
+  dayOfWeek    Int      @map("day_of_week") @db.SmallInt
+  startTime    String   @map("start_time") @db.VarChar(5)
+  endTime      String   @map("end_time") @db.VarChar(5)
+  isActive     Boolean  @default(true) @map("is_active")
+  effectiveFrom DateTime @map("effective_from") @db.Date
+  effectiveTo  DateTime? @map("effective_to") @db.Date
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+  @@index([employeeId, dayOfWeek, isActive])
+  @@index([effectiveFrom, effectiveTo])
+  @@map("employee_schedule_templates")
+}
+
+model EmployeeScheduleException {
+  id           String                @id @default(uuid())
+  employeeId   String                @map("employee_id")
+  date         DateTime              @db.Date
+  type         ScheduleExceptionType
+  startTime    String?               @map("start_time") @db.VarChar(5)
+  endTime      String?               @map("end_time") @db.VarChar(5)
+  note         String?               @db.VarChar(500)
+  createdAt    DateTime              @default(now()) @map("created_at")
+  updatedAt    DateTime              @updatedAt @map("updated_at")
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId, date])
+  @@index([employeeId, type, date])
+  @@map("employee_schedule_exceptions")
 }
 
 model EmployeeBankData {
@@ -738,11 +802,102 @@ model User {
   userRoles   UserRole[]
   refreshTokens RefreshToken[]
   customerVisits CustomerVisit[]
+  appointmentsCreated Appointment[]
+  appointmentHoldsCreated AppointmentHold[]
 
   @@index([username])
   @@index([email])
   @@index([sucursalId])
   @@map("users")
+}
+
+model AppointmentServiceType {
+  id               String    @id @default(uuid())
+  name             String    @db.VarChar(120)
+  durationOptions  Json      @map("duration_options")
+  bufferBeforeMin  Int       @default(0) @map("buffer_before_min")
+  bufferAfterMin   Int       @default(0) @map("buffer_after_min")
+  allowOverbooking Boolean   @default(false) @map("allow_overbooking")
+  isActive         Boolean   @default(true) @map("is_active")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  appointments         Appointment[]
+  overbookingPolicies  AppointmentOverbookingPolicy[]
+
+  @@index([isActive])
+  @@map("appointment_service_types")
+}
+
+model Appointment {
+  id              String            @id @default(uuid())
+  customerId      String            @map("customer_id")
+  employeeId      String            @map("employee_id")
+  serviceTypeId   String?           @map("service_type_id")
+  startAt         DateTime          @map("start_at") @db.Timestamptz(6)
+  endAt           DateTime          @map("end_at") @db.Timestamptz(6)
+  durationMin     Int               @map("duration_min")
+  status          AppointmentStatus @default(confirmed)
+  consumesCapacity Boolean          @default(true) @map("consumes_capacity")
+  source          AppointmentSource @default(manual)
+  note            String?           @db.Text
+  idempotencyKey  String?           @unique @map("idempotency_key") @db.VarChar(120)
+  createdByUserId String            @map("created_by_user_id")
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+  cancelledAt     DateTime?         @map("cancelled_at")
+  cancelReason    String?           @map("cancel_reason") @db.VarChar(500)
+
+  customer       Customer                @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  employee       Employee                @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  serviceType    AppointmentServiceType? @relation(fields: [serviceTypeId], references: [id], onDelete: SetNull)
+  createdByUser  User                    @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
+
+  @@index([customerId, startAt])
+  @@index([employeeId, startAt])
+  @@index([status, startAt])
+  @@index([serviceTypeId])
+  @@map("appointments")
+}
+
+model AppointmentHold {
+  id              String   @id @default(uuid())
+  employeeId      String   @map("employee_id")
+  startAt         DateTime @map("start_at") @db.Timestamptz(6)
+  endAt           DateTime @map("end_at") @db.Timestamptz(6)
+  expiresAt       DateTime @map("expires_at") @db.Timestamptz(6)
+  createdByUserId String   @map("created_by_user_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  employee      Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  createdByUser User     @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
+
+  @@index([employeeId, startAt])
+  @@index([expiresAt])
+  @@map("appointment_holds")
+}
+
+model AppointmentOverbookingPolicy {
+  id                String   @id @default(uuid())
+  employeeId        String?  @map("employee_id")
+  serviceTypeId     String?  @map("service_type_id")
+  startTime         String?  @map("start_time") @db.VarChar(5)
+  endTime           String?  @map("end_time") @db.VarChar(5)
+  dayOfWeek         Int?     @map("day_of_week") @db.SmallInt
+  maxParallel       Int      @default(1) @map("max_parallel")
+  isActive          Boolean  @default(true) @map("is_active")
+  effectiveFrom     DateTime @map("effective_from") @db.Date
+  effectiveTo       DateTime? @map("effective_to") @db.Date
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  employee     Employee?               @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  serviceType  AppointmentServiceType? @relation(fields: [serviceTypeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId, isActive])
+  @@index([serviceTypeId, isActive])
+  @@index([effectiveFrom, effectiveTo])
+  @@map("appointment_overbooking_policies")
 }
 
 model RefreshToken {

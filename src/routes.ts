@@ -16,6 +16,7 @@ import { chartsRouter } from './modules/charts/router.js';
 import { reportsRouter } from './modules/reports/router.js';
 import { forecastRouter } from './modules/forecast/router.js';
 import { posRouter } from './modules/pos/router.js';
+import { appointmentsRouter } from './modules/appointments/router.js';
 
 export const routes = new Hono();
 
@@ -39,3 +40,4 @@ routes.route('/charts', chartsRouter);
 routes.route('/reports', reportsRouter);
 routes.route('/forecast', forecastRouter);
 routes.route('/pos', posRouter);
+routes.route('/appointments', appointmentsRouter);
