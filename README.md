@@ -103,6 +103,11 @@ back/
 - `pnpm prisma:migrate` - Ejecutar migraciones
 - `pnpm db:seed` - Cargar datos de ejemplo
 - `pnpm vercel-build` - Build para Vercel
+- `pnpm vercel-smoke` - Smoke test post-deploy Vercel
+- `pnpm bluehost-build` - Build para Bluehost (cPanel)
+- `pnpm bluehost-deploy` - Migraciones en producción Bluehost
+- `pnpm bluehost-smoke` - Smoke test contra `apierp.pandigeektcg.cl`
+- `pnpm bluehost-db-check` - Verificar PostgreSQL y extensión `btree_gist`
 - `pnpm typecheck` - Verificar tipos TypeScript
 
 ## 🌐 Despliegue en Vercel
@@ -126,6 +131,19 @@ DATABASE_URL=postgres://user:password@host:port/db
 JWT_SECRET=tu_secreto_seguro_aqui
 NODE_ENV=production
 ```
+
+## 🌐 Despliegue en Bluehost (rama `Bluehosting`)
+
+Producción paralela en `https://apierp.pandigeektcg.cl` con Node.js App + PostgreSQL en cPanel. La rama `main` sigue en Vercel/Neon hasta validar el cutover.
+
+Guía completa: **[DEPLOY_BLUEHOST.md](./DEPLOY_BLUEHOST.md)**
+
+```bash
+# Tras deploy en cPanel
+BLUEHOST_API_URL=https://apierp.pandigeektcg.cl npm run bluehost-smoke
+```
+
+Front en cutover: `VITE_API_BASE_URL=https://apierp.pandigeektcg.cl/api`
 
 ## 📚 Endpoints Principales
 

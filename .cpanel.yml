@@ -1,0 +1,10 @@
+---
+# Ejecutado por cPanel Git al hacer "Deploy HEAD commit"
+deployment:
+  tasks:
+    - export NODE_ENV=production
+    - /bin/mkdir -p tmp
+    - npm ci
+    - npm run bluehost-build
+    - npm run bluehost-deploy
+    - /usr/bin/touch tmp/restart.txt
