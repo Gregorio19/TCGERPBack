@@ -52,6 +52,108 @@ git push -u origin Bluehosting
 
 ---
 
+## Alternativa: sin Git ni SSH (FTP + panel Node.js)
+
+Si tu cPanel **no tiene Git** ni **SSH** (como en muchos planes Bluehost), usa este flujo.
+
+### Qué hace cada cosa
+
+| Acción en cPanel | ¿Compila TypeScript? | ¿Instala dependencias? |
+|------------------|----------------------|-------------------------|
+| **Ejecutar NPM Install** | No | Sí (`node_modules` + `prisma generate`) |
+| Compilar en tu Mac | Sí (genera `dist/`) | — |
+| Subir por FTP | Copia archivos | — |
+
+**Importante:** `Ejecutar NPM Install` **no** ejecuta `tsc`. Debes compilar en tu Mac y subir la carpeta `dist/`.
+
+### Error `WebAssembly ... Out of memory` en npm install
+
+Bluehost compartido **no tiene RAM** para `prisma generate`. cPanel **no pasa** las variables de entorno al botón "Ejecutar NPM Install", así que no uses `postinstall` con Prisma.
+
+**Solución:**
+
+1. Sube **`package.json` sin `postinstall`** (versión actual del repo).
+2. **Ejecutar NPM Install** — ya no invoca Prisma.
+3. En tu Mac:
+   ```bash
+   npm run bluehost-pack-prisma
+   ```
+4. Descomprime `bluehost-prisma-client.zip` en:
+   `/home/pandigee/nodevenv/public_html/apierp.pandigeektcg.cl/20/lib/`
+   (debe quedar `node_modules/@prisma` y `node_modules/.prisma` ahí).
+
+5. Migraciones: `npm run bluehost-migrations-sql` → ejecutar `bluehost-migrations.sql` en phpPgAdmin.
+
+6. **Archivo de inicio:** `bluehost-entry.mjs` → **INICIAR APLICACIÓN**.
+
+La variable `SKIP_PRISMA_GENERATE` ya no es necesaria (pero no hace daño dejarla).
+
+5. **Migraciones sin Prisma en servidor:** en tu Mac:
+   ```bash
+   npm run bluehost-migrations-sql
+   ```
+   Sube `bluehost-migrations.sql` y ejecútalo en **phpPgAdmin** → BD `pandigee_tcgerp`.
+
+6. **Archivo de inicio:** `bluehost-entry.mjs` (no ejecuta migrate por defecto).
+7. **INICIAR APLICACIÓN** / **REINICIAR**.
+
+### A — Compilar en tu Mac
+
+```bash
+cd "/Users/cesarartunduaga/chicho /Proyectos/Pandi/TCG ERP/BackG"
+git checkout Bluehosting
+npm ci
+npm run bluehost-build
+```
+
+### B — Subir por FTP o Administrador de archivos
+
+Destino: `public_html/apierp.pandigeektcg.cl/`
+
+**Subir:**
+
+- `package.json`, `package-lock.json`
+- `bluehost-entry.mjs` (arranque con migraciones)
+- carpeta `dist/` completa
+- carpeta `prisma/` completa
+- carpeta `api-spec/` (Swagger)
+
+**No subir:** `node_modules/`, `.env`, `src/` (opcional si `dist/` está completo)
+
+### C — Configurar Setup Node.js App
+
+1. **Archivo de inicio:** cambiar de `dist/server.js` a **`bluehost-entry.mjs`**
+   (ejecuta `prisma migrate deploy` y luego arranca el servidor)
+2. Verificar variables de entorno (`DATABASE_URL`, `JWT_SECRET`, etc.)
+3. Clic **Ejecutar NPM Install**
+4. Clic **GUARDAR** → **REINICIAR**
+
+### D — Extensión PostgreSQL
+
+En **phpPgAdmin** → BD `pandigee_tcgerp`:
+
+```sql
+CREATE EXTENSION IF NOT EXISTS btree_gist;
+```
+
+Hazlo **antes** del primer reinicio si la migración de citas falla.
+
+### E — Seed (usuario de prueba)
+
+Sin SSH no puedes correr `npm run db:seed` en el servidor. Opciones:
+
+- Pedir SSH a soporte Bluehost, o
+- Crear el usuario admin manualmente en phpPgAdmin (más complejo), o
+- Migrar datos desde Neon en Fase 2
+
+### Actualizaciones futuras (sin Git)
+
+1. Compilar en Mac (`npm run bluehost-build`)
+2. Subir por FTP solo lo que cambió (`dist/`, `prisma/` si hay migraciones nuevas)
+3. **REINICIAR** la app Node en cPanel
+
+---
+
 ## Paso 2 — Git Version Control en cPanel
 
 1. cPanel → **Git Version Control** → **Create**

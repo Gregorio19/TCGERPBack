@@ -11,6 +11,11 @@ coverage/
 
 # Production
 dist/
+
+# Artefactos deploy Bluehost (generados localmente)
+bluehost-prisma-client.zip
+bluehost-node_modules-linux.zip
+bluehost-deploy/
 build/
 *.tsbuildinfo
 
