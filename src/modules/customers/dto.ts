@@ -105,3 +105,22 @@ export const listCustomerVisitsQueryDto = z.object({
   pageSize: z.string().optional(),
 });
 
+export const customerAttachmentIdParamDto = z.object({
+  id: uuidSchema,
+  attachmentId: uuidSchema,
+});
+
+export const customerVisitIdParamDto = z.object({
+  id: uuidSchema,
+  visitId: uuidSchema,
+});
+
+export const customerVisitAttachmentIdParamDto = z.object({
+  id: uuidSchema,
+  visitId: uuidSchema,
+  attachmentId: uuidSchema,
+});
+
+export const listCustomerAttachmentsQueryDto = listCustomerVisitsQueryDto;
+export const listCustomerVisitAttachmentsQueryDto = listCustomerVisitsQueryDto;
+

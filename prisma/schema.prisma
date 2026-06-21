@@ -289,6 +289,7 @@ model Customer {
   orders          Order[]
   visits          CustomerVisit[]
   appointments    Appointment[]
+  attachments     CustomerAttachment[]
 
   @@index([email])
   @@index([rut])
@@ -308,11 +309,52 @@ model CustomerVisit {
 
   customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
   usuario  User     @relation(fields: [usuarioId], references: [id], onDelete: Restrict)
+  attachments CustomerVisitAttachment[]
 
   @@index([customerId])
   @@index([fecha])
   @@index([usuarioId])
   @@map("customer_visits")
+}
+
+/// Archivos adjuntos por visita (binario en R2/S3; metadata en Postgres).
+model CustomerVisitAttachment {
+  id                String   @id @default(uuid())
+  visitId           String   @map("visit_id")
+  originalName      String   @map("original_name") @db.VarChar(255)
+  mimeType          String   @map("mime_type") @db.VarChar(127)
+  originalSizeBytes Int      @map("original_size_bytes")
+  storedSizeBytes   Int      @map("stored_size_bytes")
+  storageKey        String   @unique @map("storage_key") @db.VarChar(512)
+  descripcion       String?  @db.VarChar(500)
+  uploadedById      String   @map("uploaded_by_id")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  visit      CustomerVisit @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  uploadedBy User          @relation(fields: [uploadedById], references: [id], onDelete: Restrict)
+
+  @@index([visitId, createdAt])
+  @@map("customer_visit_attachments")
+}
+
+/// Archivos adjuntos por cliente (binario en R2/S3; metadata en Postgres).
+model CustomerAttachment {
+  id               String   @id @default(uuid())
+  customerId       String   @map("customer_id")
+  originalName     String   @map("original_name") @db.VarChar(255)
+  mimeType         String   @map("mime_type") @db.VarChar(127)
+  originalSizeBytes Int     @map("original_size_bytes")
+  storedSizeBytes  Int      @map("stored_size_bytes")
+  storageKey       String   @unique @map("storage_key") @db.VarChar(512)
+  descripcion      String?  @db.VarChar(500)
+  uploadedById     String   @map("uploaded_by_id")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  uploadedBy User     @relation(fields: [uploadedById], references: [id], onDelete: Restrict)
+
+  @@index([customerId, createdAt])
+  @@map("customer_attachments")
 }
 
 model Order {
@@ -802,6 +844,8 @@ model User {
   userRoles   UserRole[]
   refreshTokens RefreshToken[]
   customerVisits CustomerVisit[]
+  customerAttachments CustomerAttachment[]
+  customerVisitAttachments CustomerVisitAttachment[]
   appointmentsCreated Appointment[]
   appointmentHoldsCreated AppointmentHold[]
 

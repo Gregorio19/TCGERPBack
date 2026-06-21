@@ -29,7 +29,8 @@ function resolveCorsOrigin(origin: string | undefined): string | undefined | nul
 export const corsMiddleware = cors({
   origin: resolveCorsOrigin,
   allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowHeaders: ['Content-Type', 'Authorization', 'Idempotency-Key'],
+  allowHeaders: ['Content-Type', 'Authorization', 'Idempotency-Key', 'Accept'],
+  exposeHeaders: ['Location'],
   credentials: true,
 });
 

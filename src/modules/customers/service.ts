@@ -1,6 +1,7 @@
 import { db } from '../../lib/db.js';
 import { AppError, ErrorCodes } from '../../lib/errors.js';
 import { PaginationParams, buildPaginatedResponse } from '../../lib/pagination.js';
+import { mapVisitAttachment } from './visit-attachments-service.js';
 import { Prisma } from '@prisma/client';
 import { CustomerStatus } from '@prisma/client';
 
@@ -364,6 +365,12 @@ export const customerService = {
           usuario: {
             select: { nombre: true, username: true },
           },
+          attachments: {
+            orderBy: { createdAt: 'asc' },
+            include: {
+              uploadedBy: { select: { nombre: true, username: true } },
+            },
+          },
         },
       }),
       db.customerVisit.count({ where }),
@@ -380,6 +387,7 @@ export const customerService = {
         nombre: v.usuario.nombre,
         username: v.usuario.username,
       },
+      attachments: v.attachments.map((a) => mapVisitAttachment(customerId, v.id, a)),
     }));
 
     return buildPaginatedResponse(data, total, page, pageSize);
@@ -417,6 +425,7 @@ export const customerService = {
         nombre: visit.usuario.nombre,
         username: visit.usuario.username,
       },
+      attachments: [],
     };
   },
 };

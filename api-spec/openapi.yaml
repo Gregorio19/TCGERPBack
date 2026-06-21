@@ -575,6 +575,110 @@ components:
           nullable: true
           description: Monto total en CLP de la última compra (vacío si no tiene compras)
 
+    CustomerAttachment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        customerId:
+          type: string
+          format: uuid
+        originalName:
+          type: string
+        mimeType:
+          type: string
+          description: MIME almacenado (imágenes pueden convertirse a JPEG/WebP)
+        originalSizeBytes:
+          type: integer
+        storedSizeBytes:
+          type: integer
+          description: Tamaño final en R2 (menor en imágenes comprimidas)
+        descripcion:
+          type: string
+          nullable: true
+          maxLength: 500
+        createdAt:
+          type: string
+          format: date-time
+        uploadedBy:
+          type: object
+          properties:
+            nombre:
+              type: string
+            username:
+              type: string
+        downloadPath:
+          type: string
+          description: Ruta relativa; usar con JWT en GET .../download (redirect 302 a URL firmada)
+
+    CustomerVisitAttachment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        visitId:
+          type: string
+          format: uuid
+        originalName:
+          type: string
+        mimeType:
+          type: string
+        originalSizeBytes:
+          type: integer
+        storedSizeBytes:
+          type: integer
+        descripcion:
+          type: string
+          nullable: true
+          maxLength: 500
+        createdAt:
+          type: string
+          format: date-time
+        uploadedBy:
+          type: object
+          properties:
+            nombre:
+              type: string
+            username:
+              type: string
+        downloadPath:
+          type: string
+          description: Ruta relativa; GET con JWT en .../visits/{visitId}/attachments/{id}/download
+
+    CustomerVisit:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        customerId:
+          type: string
+          format: uuid
+        fecha:
+          type: string
+          format: date-time
+        descripcion:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        usuario:
+          type: object
+          properties:
+            nombre:
+              type: string
+            username:
+              type: string
+        attachments:
+          type: array
+          items:
+            $ref: '#/components/schemas/CustomerVisitAttachment'
+
     # --- RRHH (alineado con API_RRHH_CONSUMIDA_POR_FRONTEND.md y backend) ---
     RrhhApiEnvelope:
       type: object
@@ -3503,6 +3607,342 @@ paths:
           description: Cliente eliminado
         '404':
           $ref: '#/components/responses/NotFound'
+
+  /customers/{id}/visits:
+    get:
+      tags: [customers]
+      summary: Listar visitas / notas de un cliente
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/pageSize'
+      responses:
+        '200':
+          description: Lista paginada de visitas con attachments[] embebido
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/CustomerVisit'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags: [customers]
+      summary: Crear visita / nota
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [descripcion]
+              properties:
+                descripcion:
+                  type: string
+                  maxLength: 50000
+                fecha:
+                  type: string
+                  format: date-time
+      responses:
+        '201':
+          description: Visita creada (attachments vacío; subir archivos con POST .../visits/{visitId}/attachments)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerVisit'
+        '422':
+          $ref: '#/components/responses/Error422'
+
+  /customers/{id}/visits/{visitId}/attachments:
+    get:
+      tags: [customers]
+      summary: Listar adjuntos de una visita
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: visitId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/pageSize'
+      responses:
+        '200':
+          description: Lista paginada de adjuntos de la visita
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/CustomerVisitAttachment'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags: [customers]
+      summary: Subir adjunto a una visita
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: visitId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                descripcion:
+                  type: string
+                  maxLength: 500
+      responses:
+        '201':
+          description: Adjunto de visita creado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerVisitAttachment'
+        '422':
+          $ref: '#/components/responses/Error422'
+        '503':
+          description: Storage no configurado
+
+  /customers/{id}/visits/{visitId}/attachments/{attachmentId}/download:
+    get:
+      tags: [customers]
+      summary: Descargar adjunto de visita
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: visitId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: attachmentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Archivo directo (dev local)
+        '302':
+          description: Redirect a URL presignada R2
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /customers/{id}/visits/{visitId}/attachments/{attachmentId}:
+    delete:
+      tags: [customers]
+      summary: Eliminar adjunto de visita
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: visitId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: attachmentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Adjunto eliminado
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /customers/{id}/attachments:
+    get:
+      tags: [customers]
+      summary: Listar adjuntos de un cliente
+      description: |
+        Metadata de archivos (imagen, PDF, Word, Excel). Descarga vía GET .../download con JWT.
+        Tipos permitidos validados por magic bytes; límite 10 MB por archivo.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/pageSize'
+      responses:
+        '200':
+          description: Lista paginada de adjuntos
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/CustomerAttachment'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags: [customers]
+      summary: Subir adjunto de cliente
+      security:
+        - bearerAuth: []
+      description: |
+        Multipart `multipart/form-data`. Campo obligatorio `file`.
+        Opcional `descripcion` (máx. 500 caracteres).
+        Imágenes se comprimen con sharp; PDF/Office se almacenan tal cual si ≤ 10 MB.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                descripcion:
+                  type: string
+                  maxLength: 500
+      responses:
+        '201':
+          description: Adjunto creado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerAttachment'
+        '422':
+          $ref: '#/components/responses/Error422'
+        '503':
+          description: Storage S3/R2 no configurado
+
+  /customers/{id}/attachments/{attachmentId}/download:
+    get:
+      tags: [customers]
+      summary: Descargar adjunto (redirect a URL firmada R2)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: attachmentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '302':
+          description: Redirect a URL presignada (~5 min)
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          description: Storage S3/R2 no configurado
+
+  /customers/{id}/attachments/{attachmentId}:
+    delete:
+      tags: [customers]
+      summary: Eliminar adjunto (R2 + registro)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: attachmentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Adjunto eliminado
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          description: Storage S3/R2 no configurado
 
   /customers/{id}/orders:
     get:

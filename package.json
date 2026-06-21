@@ -18,9 +18,9 @@
     "test:hr": "tsx --test src/modules/hr/hr.integration.test.ts",
     "test:admin": "tsx --test src/modules/admin/admin.integration.test.ts",
     "test:dashboard": "tsx --test src/modules/dashboard/dashboard.integration.test.ts",
-    "test:customers": "tsx --test src/modules/customers/customers.integration.test.ts",
+    "test:customers": "tsx --test src/modules/customers/customers.integration.test.ts src/modules/customers/attachments.integration.test.ts src/modules/customers/visit-attachments.integration.test.ts",
     "test:appointments": "tsx --test src/modules/appointments/appointments.integration.test.ts",
-    "test:integration": "tsx --test src/modules/hr/hr.integration.test.ts src/modules/admin/admin.integration.test.ts src/modules/dashboard/dashboard.integration.test.ts src/modules/customers/customers.integration.test.ts src/modules/appointments/appointments.integration.test.ts"
+    "test:integration": "tsx --test src/modules/hr/hr.integration.test.ts src/modules/admin/admin.integration.test.ts src/modules/dashboard/dashboard.integration.test.ts src/modules/customers/customers.integration.test.ts src/modules/customers/attachments.integration.test.ts src/modules/customers/visit-attachments.integration.test.ts src/modules/appointments/appointments.integration.test.ts"
   },
   "keywords": [
     "tcg",
@@ -38,15 +38,19 @@
     "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1073.0",
+    "@aws-sdk/s3-request-presigner": "^3.1073.0",
     "@hono/node-server": "^1.8.0",
     "@prisma/client": "^5.7.0",
     "bcryptjs": "^2.4.3",
     "dayjs": "^1.11.10",
     "dotenv": "^16.3.1",
+    "file-type": "^19.6.0",
     "hono": "^4.0.0",
     "jsonwebtoken": "^9.0.2",
     "pg": "^8.11.3",
     "prisma": "^5.7.0",
+    "sharp": "^0.35.2",
     "swagger-ui-dist": "^5.30.3",
     "uuid": "^9.0.1",
     "yaml": "^2.8.1",
