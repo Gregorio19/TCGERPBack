@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { authJWT, optionalAuth } from '../../middlewares/auth-jwt.js';
-import { rbacGuard } from '../../middlewares/rbac-guard.js';
+import { canonicalPermissionGuard } from '../../middlewares/canonical-permission-guard.js';
 import { validateBody, validateParams, validateQuery } from '../../lib/validation.js';
 import { created, ok } from '../../lib/responses.js';
 import {
@@ -40,10 +40,12 @@ appointmentsRouter.get(
   }
 );
 
+const agendasManageGuard = canonicalPermissionGuard('agendas.manage');
+
 appointmentsRouter.post(
   '/',
   authJWT,
-  rbacGuard,
+  agendasManageGuard,
   validateBody(createAppointmentDto),
   async (c) => {
     const body = (c as any).get('validatedBody') as z.infer<typeof createAppointmentDto>;
@@ -61,7 +63,7 @@ appointmentsRouter.post(
 appointmentsRouter.patch(
   '/:id/reschedule',
   authJWT,
-  rbacGuard,
+  agendasManageGuard,
   validateParams(appointmentIdParamDto),
   validateBody(rescheduleAppointmentDto),
   async (c) => {
@@ -75,7 +77,7 @@ appointmentsRouter.patch(
 appointmentsRouter.patch(
   '/:id/cancel',
   authJWT,
-  rbacGuard,
+  agendasManageGuard,
   validateParams(appointmentIdParamDto),
   validateBody(cancelAppointmentDto),
   async (c) => {
@@ -89,7 +91,7 @@ appointmentsRouter.patch(
 appointmentsRouter.post(
   '/holds',
   authJWT,
-  rbacGuard,
+  agendasManageGuard,
   validateBody(createHoldDto),
   async (c) => {
     const body = (c as any).get('validatedBody') as z.infer<typeof createHoldDto>;
@@ -105,7 +107,7 @@ appointmentsRouter.post(
 appointmentsRouter.post(
   '/service-types',
   authJWT,
-  rbacGuard,
+  agendasManageGuard,
   validateBody(createServiceTypeDto),
   async (c) => {
     const body = (c as any).get('validatedBody') as z.infer<typeof createServiceTypeDto>;

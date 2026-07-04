@@ -128,6 +128,79 @@ async function resolveServiceType(serviceTypeId?: string) {
   return row;
 }
 
+type OverbookingPolicyRow = {
+  employeeId: string | null;
+  serviceTypeId: string | null;
+  startTime: string | null;
+  endTime: string | null;
+  dayOfWeek: number | null;
+  maxParallel: number;
+  isActive: boolean;
+  effectiveFrom: Date;
+  effectiveTo: Date | null;
+};
+
+function policyMatchesSlot(
+  policy: OverbookingPolicyRow,
+  input: { employeeId: string; serviceTypeId: string | null; startAt: Date }
+): boolean {
+  const dateOnly = input.startAt.toISOString().slice(0, 10);
+  const dayOfWeek = (input.startAt.getUTCDay() + 6) % 7;
+  const hhmm = input.startAt.toISOString().slice(11, 16);
+  const dateStart = new Date(`${dateOnly}T00:00:00.000Z`);
+
+  if (!policy.isActive) return false;
+  if (policy.effectiveFrom > dateStart) return false;
+  if (policy.effectiveTo && policy.effectiveTo < dateStart) return false;
+  if (policy.employeeId !== null && policy.employeeId !== input.employeeId) return false;
+  if (policy.serviceTypeId !== null && policy.serviceTypeId !== input.serviceTypeId) return false;
+  if (policy.dayOfWeek !== null && policy.dayOfWeek !== dayOfWeek) return false;
+  if (policy.startTime !== null && policy.startTime > hhmm) return false;
+  if (policy.endTime !== null && policy.endTime <= hhmm) return false;
+  return true;
+}
+
+function pickMaxParallelFromPolicies(
+  policies: OverbookingPolicyRow[],
+  input: {
+    employeeId: string;
+    serviceTypeId?: string | null;
+    startAt: Date;
+    serviceTypeAllowsOverbooking: boolean;
+  }
+): number {
+  const serviceTypeId = input.serviceTypeId ?? null;
+  const policy = policies
+    .filter((p) => policyMatchesSlot(p, { employeeId: input.employeeId, serviceTypeId, startAt: input.startAt }))
+    .sort((a, b) => b.maxParallel - a.maxParallel)[0];
+  if (!input.serviceTypeAllowsOverbooking && !policy) return 1;
+  return Math.max(2, policy?.maxParallel ?? 2);
+}
+
+async function loadOverbookingPoliciesForRange(
+  employeeIds: string[],
+  from: string,
+  to: string,
+  serviceTypeId?: string | null
+): Promise<OverbookingPolicyRow[]> {
+  if (employeeIds.length === 0) return [];
+  const fromDate = asDate(`${from}T00:00:00.000Z`);
+  const toDate = asDate(`${to}T00:00:00.000Z`);
+  return db.appointmentOverbookingPolicy.findMany({
+    where: {
+      isActive: true,
+      effectiveFrom: { lte: toDate },
+      OR: [{ effectiveTo: null }, { effectiveTo: { gte: fromDate } }],
+      AND: [
+        { OR: [{ employeeId: null }, { employeeId: { in: employeeIds } }] },
+        serviceTypeId
+          ? { OR: [{ serviceTypeId: null }, { serviceTypeId }] }
+          : { serviceTypeId: null },
+      ],
+    },
+  });
+}
+
 async function resolveMaxParallel(input: {
   employeeId: string;
   serviceTypeId?: string | null;
@@ -135,25 +208,13 @@ async function resolveMaxParallel(input: {
   serviceTypeAllowsOverbooking: boolean;
 }) {
   const dateOnly = input.startAt.toISOString().slice(0, 10);
-  const dayOfWeek = (input.startAt.getUTCDay() + 6) % 7;
-  const hhmm = input.startAt.toISOString().slice(11, 16);
-  const policy = await db.appointmentOverbookingPolicy.findFirst({
-    where: {
-      isActive: true,
-      effectiveFrom: { lte: new Date(`${dateOnly}T00:00:00.000Z`) },
-      OR: [{ effectiveTo: null }, { effectiveTo: { gte: new Date(`${dateOnly}T00:00:00.000Z`) } }],
-      AND: [
-        { OR: [{ employeeId: null }, { employeeId: input.employeeId }] },
-        { OR: [{ serviceTypeId: null }, { serviceTypeId: input.serviceTypeId ?? null }] },
-        { OR: [{ dayOfWeek: null }, { dayOfWeek }] },
-        { OR: [{ startTime: null }, { startTime: { lte: hhmm } }] },
-        { OR: [{ endTime: null }, { endTime: { gt: hhmm } }] },
-      ],
-    },
-    orderBy: [{ maxParallel: 'desc' }],
-  });
-  if (!input.serviceTypeAllowsOverbooking && !policy) return 1;
-  return Math.max(2, policy?.maxParallel ?? 2);
+  const policies = await loadOverbookingPoliciesForRange(
+    [input.employeeId],
+    dateOnly,
+    dateOnly,
+    input.serviceTypeId
+  );
+  return pickMaxParallelFromPolicies(policies, input);
 }
 
 async function checkScheduleAvailability(
@@ -238,6 +299,15 @@ export const appointmentsService = {
       },
     });
 
+    const employeeIds = employees.map((e) => e.id);
+    const overbookingPolicies = await loadOverbookingPoliciesForRange(
+      employeeIds,
+      input.from,
+      input.to,
+      input.serviceTypeId
+    );
+    const serviceTypeAllowsOverbooking = serviceType?.allowOverbooking ?? false;
+
     const slots = await Promise.all(
       employees.map(async (employee) => {
         const days = await hrService.getEmployeeCalendar(employee.id, input.from, input.to);
@@ -268,11 +338,11 @@ export const appointmentsService = {
               if (holdConflict) reason = 'slot_en_hold';
 
               if (!reason) {
-                const maxParallel = await resolveMaxParallel({
+                const maxParallel = pickMaxParallelFromPolicies(overbookingPolicies, {
                   employeeId: employee.id,
                   serviceTypeId: input.serviceTypeId ?? null,
                   startAt: slotStart,
-                  serviceTypeAllowsOverbooking: serviceType?.allowOverbooking ?? false,
+                  serviceTypeAllowsOverbooking,
                 });
                 const usedCapacity = employeeAppointments.filter((a) => {
                   const before = a.serviceType?.bufferBeforeMin ?? 0;

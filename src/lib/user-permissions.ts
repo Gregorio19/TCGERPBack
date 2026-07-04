@@ -29,3 +29,10 @@ export async function getEffectivePermissionNamesForUserId(userId: string): Prom
 
   return [...set].sort((a, b) => a.localeCompare(b));
 }
+
+export async function userHasAnyPermission(userId: string, required: string[]): Promise<boolean> {
+  if (required.length === 0) return true;
+  const effective = await getEffectivePermissionNamesForUserId(userId);
+  const set = new Set(effective);
+  return required.some((p) => set.has(p));
+}
