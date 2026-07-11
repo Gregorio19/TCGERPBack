@@ -108,6 +108,8 @@ export function mapEmpleado(e: EmployeeWithRelations) {
     fechaActualizacion: formatIsoDateTime(e.updatedAt),
     /** Contrato activo (`vigente`): tipo, sueldo base, etc. `null` si no tiene. */
     contratoVigente: vigente ? mapContratoVigenteResumen(vigente) : null,
+    montoCitaBruta: e.montoCitaBruta ?? null,
+    montoCitaTotal: e.montoCitaTotal ?? null,
   };
 }
 

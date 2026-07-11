@@ -268,6 +268,8 @@ export const hrService = {
     fechaNacimiento: string;
     direccion?: Record<string, string>;
     cargoId?: string;
+    montoCitaBruta?: number | null;
+    montoCitaTotal?: number | null;
     datosBancarios?: {
       banco: string;
       tipoCuenta: string;
@@ -312,6 +314,8 @@ export const hrService = {
           fechaNacimiento: new Date(input.fechaNacimiento),
           fechaIngreso: new Date(),
           positionId: input.cargoId,
+          montoCitaBruta: input.montoCitaBruta ?? undefined,
+          montoCitaTotal: input.montoCitaTotal ?? undefined,
         },
       });
 
@@ -356,6 +360,8 @@ export const hrService = {
       telefono?: string;
       estado?: 'activo' | 'inactivo' | 'suspendido' | 'licencia';
       cargoId?: string | null;
+      montoCitaBruta?: number | null;
+      montoCitaTotal?: number | null;
       direccion?: Record<string, string>;
       datosBancarios?: {
         banco: string;
@@ -392,6 +398,8 @@ export const hrService = {
           ...(input.telefono !== undefined ? { telefono: input.telefono } : {}),
           ...(input.estado ? { estado: input.estado } : {}),
           ...(input.cargoId !== undefined ? { positionId: input.cargoId } : {}),
+          ...(input.montoCitaBruta !== undefined ? { montoCitaBruta: input.montoCitaBruta } : {}),
+          ...(input.montoCitaTotal !== undefined ? { montoCitaTotal: input.montoCitaTotal } : {}),
           ...(input.direccion
             ? { direccion: input.direccion as Prisma.InputJsonValue }
             : {}),

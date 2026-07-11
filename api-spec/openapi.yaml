@@ -839,6 +839,14 @@ components:
           $ref: '#/components/schemas/RrhhContratoVigenteResumen'
           nullable: true
           description: Datos del contrato activo (vigente); null si no tiene
+        montoCitaBruta:
+          type: integer
+          nullable: true
+          description: Monto por consulta bruta (CLP enteros)
+        montoCitaTotal:
+          type: integer
+          nullable: true
+          description: Monto por consulta total (CLP enteros)
         fechaCreacion: { type: string, format: date-time }
         fechaActualizacion: { type: string, format: date-time }
 
@@ -858,6 +866,16 @@ components:
         cargoId:
           type: string
           format: uuid
+        montoCitaBruta:
+          type: integer
+          minimum: 0
+          nullable: true
+          description: Monto por consulta bruta (CLP enteros)
+        montoCitaTotal:
+          type: integer
+          minimum: 0
+          nullable: true
+          description: Monto por consulta total (CLP enteros)
         datosBancarios:
           $ref: '#/components/schemas/RrhhDatosBancarios'
         previsional:
@@ -875,6 +893,16 @@ components:
           type: string
           format: uuid
           nullable: true
+        montoCitaBruta:
+          type: integer
+          minimum: 0
+          nullable: true
+          description: Monto por consulta bruta (CLP enteros)
+        montoCitaTotal:
+          type: integer
+          minimum: 0
+          nullable: true
+          description: Monto por consulta total (CLP enteros)
         direccion:
           $ref: '#/components/schemas/RrhhDireccion'
         datosBancarios:

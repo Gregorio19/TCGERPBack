@@ -598,6 +598,8 @@ model Employee {
   estado            EmployeeStatus @default(activo)
   branchId          String?        @map("branch_id")
   positionId        String?        @map("position_id")
+  montoCitaBruta    Int?           @map("monto_cita_bruta")
+  montoCitaTotal    Int?           @map("monto_cita_total")
   createdAt         DateTime       @default(now()) @map("created_at")
   updatedAt         DateTime       @updatedAt @map("updated_at")
   deletedAt         DateTime?      @map("deleted_at")
