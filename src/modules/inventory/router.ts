@@ -1,8 +1,8 @@
 import { legacyLowStock } from './alerts-router.js';
-import { Hono, type Context } from 'hono';
+import { Hono } from 'hono';
 import { authJWT, getAuthUser } from '../../middlewares/auth-jwt.js';
 import { rbacGuard } from '../../middlewares/rbac-guard.js';
-import { validateBody, validateQuery, validateParams } from '../../lib/validation.js';
+import { getValidated, validateBody, validateQuery, validateParams } from '../../lib/validation.js';
 import {
   updateStockDto,
   inventoryAdjustmentDto,
@@ -16,7 +16,6 @@ import { inventoryService } from './service.js';
 import { ok, created } from '../../lib/responses.js';
 import { parsePagination } from '../../lib/pagination.js';
 import { mapProduct } from '../../lib/mapper.js';
-import { z } from 'zod';
 
 export const inventoryRouter = new Hono();
 
@@ -27,7 +26,7 @@ inventoryRouter.get(
   rbacGuard,
   validateQuery(listInventoryQueryDto),
   async (c) => {
-    const query = (c as any).get('validatedQuery') as z.infer<typeof listInventoryQueryDto>;
+    const query = getValidated(c, 'validatedQuery', listInventoryQueryDto);
     const queryRecord: Record<string, string | undefined> = {};
     if (query.page) queryRecord.page = query.page;
     if (query.limit) queryRecord.limit = query.limit;
@@ -86,7 +85,7 @@ inventoryRouter.get(
   rbacGuard,
   validateQuery(listAlertsQueryDto),
   async (c) => {
-    const query = (c as any).get('validatedQuery') as z.infer<typeof listAlertsQueryDto>;
+    const query = getValidated(c, 'validatedQuery', listAlertsQueryDto);
     const alerts = await inventoryService.getAlerts({
       priority: query.priority,
       type: query.type,
@@ -112,11 +111,8 @@ inventoryRouter.patch(
   validateParams(inventoryIdParamDto),
   validateBody(updateStockDto),
   async (c) => {
-    const { id } = (c as any).get('validatedParams') as { id: number };
-    const { stockActual, motivo } = (c as any).get('validatedBody') as {
-      stockActual: number;
-      motivo?: string;
-    };
+    const { id } = getValidated(c, 'validatedParams', inventoryIdParamDto);
+    const { stockActual, motivo } = getValidated(c, 'validatedBody', updateStockDto);
     const product = await inventoryService.updateStock(id, stockActual, getAuthUser(c).userId, motivo);
     return ok(c, mapProduct(product));
   }
@@ -136,8 +132,8 @@ inventoryRouter.get(
   validateParams(locationParamDto),
   validateQuery(listInventoryQueryDto),
   async (c) => {
-    const { location } = (c as any).get('validatedParams') as { location: string };
-    const query = (c as any).get('validatedQuery') as z.infer<typeof listInventoryQueryDto>;
+    const { location } = getValidated(c, 'validatedParams', locationParamDto);
+    const query = getValidated(c, 'validatedQuery', listInventoryQueryDto);
     const queryRecord: Record<string, string | undefined> = {};
     if (query.page) queryRecord.page = query.page;
     if (query.pageSize) queryRecord.pageSize = query.pageSize;
@@ -164,14 +160,14 @@ inventoryRouter.post(
   rbacGuard,
   validateBody(inventoryAdjustmentDto),
   async (c) => {
-    const data = (c as any).get('validatedBody') as z.infer<typeof inventoryAdjustmentDto>;
+    const data = getValidated(c, 'validatedBody', inventoryAdjustmentDto);
     const result = await inventoryService.adjustInventory(data, getAuthUser(c).userId);
     return created(c, result);
   }
 );
 
 inventoryRouter.get('/movements', authJWT, rbacGuard, validateQuery(listMovementsQueryDto), async (c) => {
-  const { page, pageSize, ...filters } = (c as Context).get('validatedQuery') as z.infer<typeof listMovementsQueryDto>;
+  const { page, pageSize, ...filters } = getValidated(c, 'validatedQuery', listMovementsQueryDto);
   return ok(c, await inventoryService.listMovements(page, pageSize, filters));
 });
 
@@ -182,7 +178,7 @@ inventoryRouter.get(
   rbacGuard,
   validateParams(inventoryIdParamDto),
   async (c) => {
-    const params = (c as any).get('validatedParams') as { id: number };
+    const params = getValidated(c, 'validatedParams', inventoryIdParamDto);
     const item = await inventoryService.getById(params.id);
     return ok(c, {
       ...mapProduct(item),
@@ -203,7 +199,7 @@ inventoryRouter.put(
   async (c) => {
     // Por ahora, este endpoint actualiza el producto
     // En el futuro podría actualizar StockByBranch específico
-    const params = (c as any).get('validatedParams') as { id: number };
+    const params = getValidated(c, 'validatedParams', inventoryIdParamDto);
     const body = await c.req.json();
     
     // Importar productService para actualizar

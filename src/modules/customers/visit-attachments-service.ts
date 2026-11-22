@@ -1,18 +1,8 @@
-import { randomUUID } from 'node:crypto';
 import { db } from '../../lib/db.js';
 import { AppError, ErrorCodes } from '../../lib/errors.js';
-import { PaginationParams, buildPaginatedResponse } from '../../lib/pagination.js';
-import {
-  assertAttachmentStorageConfigured,
-} from '../../lib/storage/index.js';
-import {
-  deleteStoredObject,
-  mapUploadedBy,
-  processUploadFile,
-  putProcessedFile,
-  resolveDownloadFromStorage,
-  type AttachmentDownloadResult,
-} from '../../lib/attachments/attachment-ops.js';
+import type { PaginationParams } from '../../lib/pagination.js';
+import { mapUploadedBy, type AttachmentDownloadResult } from '../../lib/attachments/attachment-ops.js';
+import { attachmentUploaderInclude, createAttachmentService } from './attachment-service-core.js';
 import { customerService } from './service.js';
 
 function buildStorageKey(
@@ -63,72 +53,35 @@ async function getVisitForCustomer(customerId: string, visitId: string) {
   return visit;
 }
 
+type VisitOwner = { customerId: string; visitId: string };
+
+const attachments = createAttachmentService({
+  requireOwner: ({ customerId, visitId }: VisitOwner) => getVisitForCustomer(customerId, visitId),
+  requireOwnerForLookup: true,
+  storageKey: ({ customerId, visitId }, id, filename) => buildStorageKey(customerId, visitId, id, filename),
+  findMany: ({ visitId }, options) => db.customerVisitAttachment.findMany({
+    ...options,
+    where: { visitId },
+    orderBy: { createdAt: 'asc' },
+  }),
+  count: ({ visitId }) => db.customerVisitAttachment.count({ where: { visitId } }),
+  create: ({ visitId }, data) => db.customerVisitAttachment.create({
+    data: { ...data, visitId },
+    include: attachmentUploaderInclude,
+  }),
+  find: ({ visitId }, id) => db.customerVisitAttachment.findFirst({ where: { id, visitId } }),
+  delete: (id) => db.customerVisitAttachment.delete({ where: { id } }),
+  map: ({ customerId, visitId }, row) => mapVisitAttachment(customerId, visitId, row),
+  notFoundMessage: 'Adjunto de visita no encontrado',
+});
+
 export const customerVisitAttachmentService = {
   async list(customerId: string, visitId: string, params: PaginationParams) {
-    await getVisitForCustomer(customerId, visitId);
-    const { page, pageSize } = params;
-    const where = { visitId };
-
-    const [rows, total] = await Promise.all([
-      db.customerVisitAttachment.findMany({
-        where,
-        orderBy: { createdAt: 'asc' },
-        skip: (page - 1) * pageSize,
-        take: pageSize,
-        include: {
-          uploadedBy: { select: { nombre: true, username: true } },
-        },
-      }),
-      db.customerVisitAttachment.count({ where }),
-    ]);
-
-    const data = rows.map((row) => mapVisitAttachment(customerId, visitId, row));
-    return buildPaginatedResponse(data, total, page, pageSize);
+    return attachments.list({ customerId, visitId }, params);
   },
 
-  async upload(
-    customerId: string,
-    visitId: string,
-    uploadedById: string,
-    file: File,
-    descripcion?: string | null
-  ) {
-    assertAttachmentStorageConfigured();
-    await getVisitForCustomer(customerId, visitId);
-
-    const processed = await processUploadFile(file);
-    const attachmentId = randomUUID();
-    const storageKey = buildStorageKey(
-      customerId,
-      visitId,
-      attachmentId,
-      processed.originalName
-    );
-
-    await putProcessedFile(storageKey, processed);
-
-    try {
-      const row = await db.customerVisitAttachment.create({
-        data: {
-          id: attachmentId,
-          visitId,
-          originalName: processed.originalName,
-          mimeType: processed.mimeType,
-          originalSizeBytes: processed.originalSizeBytes,
-          storedSizeBytes: processed.storedSizeBytes,
-          storageKey,
-          descripcion: descripcion ?? null,
-          uploadedById,
-        },
-        include: {
-          uploadedBy: { select: { nombre: true, username: true } },
-        },
-      });
-      return mapVisitAttachment(customerId, visitId, row);
-    } catch (err) {
-      await deleteStoredObject(storageKey).catch(() => undefined);
-      throw err;
-    }
+  async upload(customerId: string, visitId: string, uploadedById: string, file: File, descripcion?: string | null) {
+    return attachments.upload({ customerId, visitId }, uploadedById, file, descripcion);
   },
 
   async resolveDownload(
@@ -137,25 +90,14 @@ export const customerVisitAttachmentService = {
     attachmentId: string,
     options?: { inline?: boolean }
   ): Promise<AttachmentDownloadResult> {
-    const row = await this.getById(customerId, visitId, attachmentId);
-    return resolveDownloadFromStorage(row.storageKey, row.originalName, options);
+    return attachments.resolveDownload({ customerId, visitId }, attachmentId, options);
   },
 
   async getById(customerId: string, visitId: string, attachmentId: string) {
-    await getVisitForCustomer(customerId, visitId);
-    const row = await db.customerVisitAttachment.findFirst({
-      where: { id: attachmentId, visitId },
-    });
-    if (!row) {
-      throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 'Adjunto de visita no encontrado', 404);
-    }
-    return row;
+    return attachments.getById({ customerId, visitId }, attachmentId);
   },
 
   async delete(customerId: string, visitId: string, attachmentId: string) {
-    assertAttachmentStorageConfigured();
-    const row = await this.getById(customerId, visitId, attachmentId);
-    await deleteStoredObject(row.storageKey);
-    await db.customerVisitAttachment.delete({ where: { id: attachmentId } });
+    return attachments.delete({ customerId, visitId }, attachmentId);
   },
 };

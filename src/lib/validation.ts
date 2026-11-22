@@ -2,12 +2,24 @@ import { z } from 'zod';
 import { Context } from 'hono';
 import { AppError, ErrorCodes } from './errors.js';
 
+type ValidationKey = 'validatedBody' | 'validatedQuery' | 'validatedParams';
+type ValidationContext = Context<{ Variables: Record<ValidationKey, unknown> }>;
+
+// The matching validate middleware has already parsed this value with the supplied schema.
+export function getValidated<T extends z.ZodTypeAny>(
+  c: ValidationContext,
+  key: ValidationKey,
+  _schema: T
+): z.output<T> {
+  return c.get(key) as z.output<T>;
+}
+
 export const validateBody = <T extends z.ZodTypeAny>(schema: T) => {
-  return async (c: Context, next: () => Promise<void>) => {
+  return async (c: ValidationContext, next: () => Promise<void>) => {
     try {
       const body = await c.req.json();
       const validated = await schema.parseAsync(body);
-      (c as any).set('validatedBody', validated);
+      c.set('validatedBody', validated);
       await next();
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -24,7 +36,7 @@ export const validateBody = <T extends z.ZodTypeAny>(schema: T) => {
 };
 
 export const validateQuery = <T extends z.ZodTypeAny>(schema: T) => {
-  return async (c: Context, next: () => Promise<void>) => {
+  return async (c: ValidationContext, next: () => Promise<void>) => {
     try {
       const queryParams: Record<string, string | undefined> = {};
       // Hono's query() returns a function that takes a key
@@ -34,7 +46,7 @@ export const validateQuery = <T extends z.ZodTypeAny>(schema: T) => {
         queryParams[key] = value;
       }
       const validated = await schema.parseAsync(queryParams);
-      (c as any).set('validatedQuery', validated);
+      c.set('validatedQuery', validated);
       await next();
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -51,11 +63,11 @@ export const validateQuery = <T extends z.ZodTypeAny>(schema: T) => {
 };
 
 export const validateParams = <T extends z.ZodTypeAny>(schema: T) => {
-  return async (c: Context, next: () => Promise<void>) => {
+  return async (c: ValidationContext, next: () => Promise<void>) => {
     try {
       const params = c.req.param();
       const validated = await schema.parseAsync(params);
-      (c as any).set('validatedParams', validated);
+      c.set('validatedParams', validated);
       await next();
     } catch (error) {
       if (error instanceof z.ZodError) {

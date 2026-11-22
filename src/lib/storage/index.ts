@@ -17,7 +17,9 @@ export function getAttachmentStorage(): AttachmentStorage {
   }
   if (!storage) {
     if (env.ATTACHMENTS_STORAGE === 'memory') {
-      storage = createDevFileAttachmentStorage();
+      storage = env.NODE_ENV === 'test'
+        ? createMemoryAttachmentStorage()
+        : createDevFileAttachmentStorage();
     } else {
       if (!isAttachmentsStorageConfigured()) {
         throw new Error('Attachment storage is not configured (S3/R2 env vars missing)');

@@ -13,8 +13,8 @@ import { db } from './lib/db.js';
 export const app = new Hono();
 
 // Middlewares globales (error handler debe ir al final para capturar todos los errores)
-app.use('*', corsMiddleware);
 app.use('*', requestLogger);
+app.use('*', corsMiddleware);
 
 // Error handler debe estar al final para capturar errores de todos los middlewares y rutas
 app.onError((err, c) => {

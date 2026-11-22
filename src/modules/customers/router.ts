@@ -1,7 +1,7 @@
 import { Hono, type Context } from 'hono';
 import { authJWT, getAuthUser } from '../../middlewares/auth-jwt.js';
 import { rbacGuard } from '../../middlewares/rbac-guard.js';
-import { validateBody, validateQuery, validateParams } from '../../lib/validation.js';
+import { getValidated, validateBody, validateQuery, validateParams } from '../../lib/validation.js';
 import {
   createCustomerDto,
   updateCustomerDto,
@@ -18,17 +18,15 @@ import {
 } from './dto.js';
 import { createPurchase, createPurchaseDto, listPurchases } from './purchases.js';
 import { getStoreCredit } from './store-credit.js';
-import { customerService } from './service.js';
+import { parseCustomersListQuery, customerService } from './service.js';
 import { customerAttachmentService } from './attachments-service.js';
 import { customerVisitAttachmentService } from './visit-attachments-service.js';
 import { ok, created, noContent } from '../../lib/responses.js';
 import { buildContentDisposition } from '../../lib/attachments/content-disposition.js';
 import { parsePagination } from '../../lib/pagination.js';
 import { mapCustomer } from '../../lib/mapper.js';
-import { AppError, ErrorCodes } from '../../lib/errors.js';
-import { isAttachmentStorageAvailable } from '../../lib/storage/index.js';
+import { parseAttachmentForm, requireAttachmentStorage } from './attachment-service-core.js';
 import type { AttachmentDownloadResult } from '../../lib/attachments/attachment-ops.js';
-import { z } from 'zod';
 
 function respondAttachmentDownload(
   c: Context,
@@ -70,29 +68,8 @@ customersRouter.get(
   rbacGuard,
   validateQuery(listCustomersQueryDto),
   async (c) => {
-    const query = (c as any).get('validatedQuery') as z.infer<typeof listCustomersQueryDto>;
-    const queryRecord: Record<string, string | undefined> = {};
-    if (query.page) queryRecord.page = query.page;
-    if (query.limit) queryRecord.limit = query.limit;
-    if (query.pageSize) queryRecord.pageSize = query.pageSize;
-    if (query.sortBy) queryRecord.sortBy = query.sortBy;
-    if (query.sortOrder) queryRecord.sortOrder = query.sortOrder;
-    if (query.sortDir) queryRecord.sortDir = query.sortDir;
-    if (query.search) queryRecord.search = query.search;
-    if (query.q) queryRecord.q = query.q;
-
-    const pagination = parsePagination(queryRecord);
-    const filters = {
-      estado: query.estado,
-      canalComunicacion: query.canalComunicacion,
-      recibirPromociones: query.recibirPromociones,
-      dateFrom: query.dateFrom,
-      dateTo: query.dateTo,
-      region: query.region,
-      ciudad: query.ciudad,
-    };
-
-    const result = await customerService.list({ ...pagination, ...filters });
+    const query = getValidated(c, 'validatedQuery', listCustomersQueryDto);
+    const result = await customerService.list(parseCustomersListQuery(query));
     return ok(c, {
       ...result,
       data: result.data.map(mapCustomer),
@@ -107,7 +84,7 @@ customersRouter.post(
   rbacGuard,
   validateBody(createCustomerDto),
   async (c) => {
-    const data = (c as any).get('validatedBody') as z.infer<typeof createCustomerDto>;
+    const data = getValidated(c, 'validatedBody', createCustomerDto);
     const customer = await customerService.create(data);
     return created(c, mapCustomer(customer));
   }
@@ -121,13 +98,9 @@ customersRouter.get(
   validateParams(customerIdParamDto),
   validateQuery(listCustomerVisitsQueryDto),
   async (c) => {
-    const { id } = (c as any).get('validatedParams') as { id: string };
-    const query = (c as any).get('validatedQuery') as z.infer<typeof listCustomerVisitsQueryDto>;
-    const queryRecord: Record<string, string | undefined> = {};
-    if (query.page) queryRecord.page = query.page;
-    if (query.limit) queryRecord.limit = query.limit;
-    if (query.pageSize) queryRecord.pageSize = query.pageSize;
-    const pagination = parsePagination(queryRecord);
+    const { id } = getValidated(c, 'validatedParams', customerIdParamDto);
+    const query = getValidated(c, 'validatedQuery', listCustomerVisitsQueryDto);
+    const pagination = parsePagination(query);
     const result = await customerService.listVisits(id, pagination, query.tipo);
     return ok(c, result);
   }
@@ -140,14 +113,10 @@ customersRouter.post(
   validateParams(customerIdParamDto),
   validateBody(createCustomerVisitDto),
   async (c) => {
-    const { id } = (c as any).get('validatedParams') as { id: string };
-    const body = (c as any).get('validatedBody') as z.infer<typeof createCustomerVisitDto>;
-    const user = (c as { get: (k: string) => unknown }).get('user') as { userId: string };
-    const visit = await customerService.createVisit(id, user.userId, {
-      descripcion: body.descripcion,
-      tipo: body.tipo,
-      ...(body.fecha !== undefined && { fecha: new Date(body.fecha) }),
-    });
+    const { id } = getValidated(c, 'validatedParams', customerIdParamDto);
+    const body = getValidated(c, 'validatedBody', createCustomerVisitDto);
+    const user = getAuthUser(c);
+    const visit = await customerService.createVisit(id, user.userId, body);
     return created(c, visit);
   }
 );
@@ -159,12 +128,9 @@ customersRouter.patch(
   validateParams(customerVisitIdParamDto),
   validateBody(updateCustomerVisitDto),
   async (c) => {
-    const { id, visitId } = (c as any).get('validatedParams') as z.infer<typeof customerVisitIdParamDto>;
-    const { fecha, ...body } = (c as any).get('validatedBody') as z.infer<typeof updateCustomerVisitDto>;
-    const visit = await customerService.updateVisit(id, visitId, {
-      ...body,
-      ...(fecha !== undefined && { fecha: new Date(fecha) }),
-    });
+    const { id, visitId } = getValidated(c, 'validatedParams', customerVisitIdParamDto);
+    const body = getValidated(c, 'validatedBody', updateCustomerVisitDto);
+    const visit = await customerService.updateVisit(id, visitId, body);
     return ok(c, visit);
   }
 );
@@ -177,15 +143,9 @@ customersRouter.get(
   validateParams(customerVisitIdParamDto),
   validateQuery(listCustomerVisitAttachmentsQueryDto),
   async (c) => {
-    const { id, visitId } = (c as any).get('validatedParams') as { id: string; visitId: string };
-    const query = (c as any).get('validatedQuery') as z.infer<
-      typeof listCustomerVisitAttachmentsQueryDto
-    >;
-    const queryRecord: Record<string, string | undefined> = {};
-    if (query.page) queryRecord.page = query.page;
-    if (query.limit) queryRecord.limit = query.limit;
-    if (query.pageSize) queryRecord.pageSize = query.pageSize;
-    const pagination = parsePagination(queryRecord);
+    const { id, visitId } = getValidated(c, 'validatedParams', customerVisitIdParamDto);
+    const query = getValidated(c, 'validatedQuery', listCustomerVisitAttachmentsQueryDto);
+    const pagination = parsePagination(query);
     const result = await customerVisitAttachmentService.list(id, visitId, pagination);
     return ok(c, result);
   }
@@ -197,27 +157,10 @@ customersRouter.post(
   rbacGuard,
   validateParams(customerVisitIdParamDto),
   async (c) => {
-    if (!isAttachmentStorageAvailable()) {
-      throw new AppError(
-        ErrorCodes.EXTERNAL_SERVICE_ERROR,
-        'Almacenamiento de adjuntos no configurado (variables S3/R2)',
-        503
-      );
-    }
-    const { id, visitId } = (c as any).get('validatedParams') as { id: string; visitId: string };
-    const user = (c as { get: (k: string) => unknown }).get('user') as { userId: string };
-    const form = await c.req.formData();
-    const file = form.get('file');
-    if (!(file instanceof File)) {
-      throw new AppError(ErrorCodes.VALIDATION_ERROR, 'Campo file requerido (multipart)', 422, [
-        { field: 'file', message: 'Archivo requerido' },
-      ]);
-    }
-    const descripcionRaw = form.get('descripcion');
-    const descripcion =
-      typeof descripcionRaw === 'string' && descripcionRaw.trim()
-        ? descripcionRaw.trim().slice(0, 500)
-        : undefined;
+    requireAttachmentStorage();
+    const { id, visitId } = getValidated(c, 'validatedParams', customerVisitIdParamDto);
+    const user = getAuthUser(c);
+    const { file, descripcion } = parseAttachmentForm(await c.req.formData());
     const attachment = await customerVisitAttachmentService.upload(
       id,
       visitId,
@@ -235,18 +178,8 @@ customersRouter.get(
   rbacGuard,
   validateParams(customerVisitAttachmentIdParamDto),
   async (c) => {
-    if (!isAttachmentStorageAvailable()) {
-      throw new AppError(
-        ErrorCodes.EXTERNAL_SERVICE_ERROR,
-        'Almacenamiento de adjuntos no configurado (variables S3/R2)',
-        503
-      );
-    }
-    const { id, visitId, attachmentId } = (c as any).get('validatedParams') as {
-      id: string;
-      visitId: string;
-      attachmentId: string;
-    };
+    requireAttachmentStorage();
+    const { id, visitId, attachmentId } = getValidated(c, 'validatedParams', customerVisitAttachmentIdParamDto);
     const accept = c.req.header('Accept') ?? '';
     const wantsJson = accept.includes('application/json');
     const inline = c.req.query('inline') === '1' || c.req.query('inline') === 'true';
@@ -266,18 +199,8 @@ customersRouter.delete(
   rbacGuard,
   validateParams(customerVisitAttachmentIdParamDto),
   async (c) => {
-    if (!isAttachmentStorageAvailable()) {
-      throw new AppError(
-        ErrorCodes.EXTERNAL_SERVICE_ERROR,
-        'Almacenamiento de adjuntos no configurado (variables S3/R2)',
-        503
-      );
-    }
-    const { id, visitId, attachmentId } = (c as any).get('validatedParams') as {
-      id: string;
-      visitId: string;
-      attachmentId: string;
-    };
+    requireAttachmentStorage();
+    const { id, visitId, attachmentId } = getValidated(c, 'validatedParams', customerVisitAttachmentIdParamDto);
     await customerVisitAttachmentService.delete(id, visitId, attachmentId);
     return noContent(c);
   }
@@ -291,15 +214,9 @@ customersRouter.get(
   validateParams(customerIdParamDto),
   validateQuery(listCustomerAttachmentsQueryDto),
   async (c) => {
-    const { id } = (c as any).get('validatedParams') as { id: string };
-    const query = (c as any).get('validatedQuery') as z.infer<
-      typeof listCustomerAttachmentsQueryDto
-    >;
-    const queryRecord: Record<string, string | undefined> = {};
-    if (query.page) queryRecord.page = query.page;
-    if (query.limit) queryRecord.limit = query.limit;
-    if (query.pageSize) queryRecord.pageSize = query.pageSize;
-    const pagination = parsePagination(queryRecord);
+    const { id } = getValidated(c, 'validatedParams', customerIdParamDto);
+    const query = getValidated(c, 'validatedQuery', listCustomerAttachmentsQueryDto);
+    const pagination = parsePagination(query);
     const result = await customerAttachmentService.list(id, pagination);
     return ok(c, result);
   }
@@ -311,27 +228,10 @@ customersRouter.post(
   rbacGuard,
   validateParams(customerIdParamDto),
   async (c) => {
-    if (!isAttachmentStorageAvailable()) {
-      throw new AppError(
-        ErrorCodes.EXTERNAL_SERVICE_ERROR,
-        'Almacenamiento de adjuntos no configurado (variables S3/R2)',
-        503
-      );
-    }
-    const { id } = (c as any).get('validatedParams') as { id: string };
-    const user = (c as { get: (k: string) => unknown }).get('user') as { userId: string };
-    const form = await c.req.formData();
-    const file = form.get('file');
-    if (!(file instanceof File)) {
-      throw new AppError(ErrorCodes.VALIDATION_ERROR, 'Campo file requerido (multipart)', 422, [
-        { field: 'file', message: 'Archivo requerido' },
-      ]);
-    }
-    const descripcionRaw = form.get('descripcion');
-    const descripcion =
-      typeof descripcionRaw === 'string' && descripcionRaw.trim()
-        ? descripcionRaw.trim().slice(0, 500)
-        : undefined;
+    requireAttachmentStorage();
+    const { id } = getValidated(c, 'validatedParams', customerIdParamDto);
+    const user = getAuthUser(c);
+    const { file, descripcion } = parseAttachmentForm(await c.req.formData());
     const attachment = await customerAttachmentService.upload(id, user.userId, file, descripcion);
     return created(c, attachment);
   }
@@ -343,17 +243,8 @@ customersRouter.get(
   rbacGuard,
   validateParams(customerAttachmentIdParamDto),
   async (c) => {
-    if (!isAttachmentStorageAvailable()) {
-      throw new AppError(
-        ErrorCodes.EXTERNAL_SERVICE_ERROR,
-        'Almacenamiento de adjuntos no configurado (variables S3/R2)',
-        503
-      );
-    }
-    const { id, attachmentId } = (c as any).get('validatedParams') as {
-      id: string;
-      attachmentId: string;
-    };
+    requireAttachmentStorage();
+    const { id, attachmentId } = getValidated(c, 'validatedParams', customerAttachmentIdParamDto);
     const accept = c.req.header('Accept') ?? '';
     const wantsJson = accept.includes('application/json');
     const inline = c.req.query('inline') === '1' || c.req.query('inline') === 'true';
@@ -371,17 +262,8 @@ customersRouter.delete(
   rbacGuard,
   validateParams(customerAttachmentIdParamDto),
   async (c) => {
-    if (!isAttachmentStorageAvailable()) {
-      throw new AppError(
-        ErrorCodes.EXTERNAL_SERVICE_ERROR,
-        'Almacenamiento de adjuntos no configurado (variables S3/R2)',
-        503
-      );
-    }
-    const { id, attachmentId } = (c as any).get('validatedParams') as {
-      id: string;
-      attachmentId: string;
-    };
+    requireAttachmentStorage();
+    const { id, attachmentId } = getValidated(c, 'validatedParams', customerAttachmentIdParamDto);
     await customerAttachmentService.delete(id, attachmentId);
     return noContent(c);
   }
@@ -394,7 +276,7 @@ customersRouter.get(
   rbacGuard,
   validateParams(customerIdParamDto),
   async (c) => {
-    const params = (c as any).get('validatedParams') as { id: string };
+    const params = getValidated(c, 'validatedParams', customerIdParamDto);
     const customer = await customerService.getById(params.id);
     return ok(c, mapCustomer(customer));
   }
@@ -408,8 +290,8 @@ customersRouter.put(
   validateParams(customerIdParamDto),
   validateBody(updateCustomerDto),
   async (c) => {
-    const { id } = (c as any).get('validatedParams') as { id: string };
-    const data = (c as any).get('validatedBody') as z.infer<typeof updateCustomerDto>;
+    const { id } = getValidated(c, 'validatedParams', customerIdParamDto);
+    const data = getValidated(c, 'validatedBody', updateCustomerDto);
     const customer = await customerService.update(id, data);
     return ok(c, mapCustomer(customer));
   }
@@ -422,7 +304,7 @@ customersRouter.delete(
   rbacGuard,
   validateParams(customerIdParamDto),
   async (c) => {
-    const { id } = (c as any).get('validatedParams') as { id: string };
+    const { id } = getValidated(c, 'validatedParams', customerIdParamDto);
     await customerService.delete(id);
     return noContent(c);
   }
@@ -435,7 +317,7 @@ customersRouter.get(
   rbacGuard,
   validateParams(customerIdParamDto),
   async (c) => {
-    const { id } = (c as any).get('validatedParams') as { id: string };
+    const { id } = getValidated(c, 'validatedParams', customerIdParamDto);
     const orders = await customerService.getOrders(id);
     return ok(c, orders);
   }
@@ -448,7 +330,7 @@ customersRouter.get(
   rbacGuard,
   validateParams(customerIdParamDto),
   async (c) => {
-    const { id } = (c as any).get('validatedParams') as { id: string };
+    const { id } = getValidated(c, 'validatedParams', customerIdParamDto);
     const stats = await customerService.getStats(id);
     return ok(c, stats);
   }
@@ -456,20 +338,20 @@ customersRouter.get(
 
 
 customersRouter.get('/:id/store-credit', authJWT, rbacGuard, validateParams(customerIdParamDto), async (c) => {
-  const { id } = (c as Context).get('validatedParams') as z.infer<typeof customerIdParamDto>;
+  const { id } = getValidated(c, 'validatedParams', customerIdParamDto);
   return ok(c, await getStoreCredit(id));
 });
 
 customersRouter.get('/:id/purchases', authJWT, rbacGuard, validateParams(customerIdParamDto), async (c) => {
-  const { id } = (c as Context).get('validatedParams') as z.infer<typeof customerIdParamDto>;
+  const { id } = getValidated(c, 'validatedParams', customerIdParamDto);
   return ok(c, await listPurchases(id));
 });
 
 customersRouter.post(
   '/:id/purchases', authJWT, rbacGuard, validateParams(customerIdParamDto), validateBody(createPurchaseDto),
   async (c) => {
-    const { id } = (c as Context).get('validatedParams') as z.infer<typeof customerIdParamDto>;
-    const input = (c as Context).get('validatedBody') as z.infer<typeof createPurchaseDto>;
+    const { id } = getValidated(c, 'validatedParams', customerIdParamDto);
+    const input = getValidated(c, 'validatedBody', createPurchaseDto);
     return created(c, await createPurchase(id, getAuthUser(c).userId, input));
   }
 );

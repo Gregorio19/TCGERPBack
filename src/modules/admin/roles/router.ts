@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { authJWT } from '../../../middlewares/auth-jwt.js';
 import { rbacGuard } from '../../../middlewares/rbac-guard.js';
-import { validateBody, validateQuery, validateParams } from '../../../lib/validation.js';
+import { getValidated, validateBody, validateQuery, validateParams } from '../../../lib/validation.js';
 import {
   createRoleDto,
   updateRoleDto,
@@ -12,7 +12,6 @@ import {
 import { roleService } from './service.js';
 import { ok, created, noContent } from '../../../lib/responses.js';
 import { parsePagination } from '../../../lib/pagination.js';
-import { z } from 'zod';
 
 export const rolesRouter = new Hono();
 
@@ -22,7 +21,7 @@ rolesRouter.get(
   rbacGuard,
   validateQuery(listRolesQueryDto),
   async (c) => {
-    const query = (c as any).get('validatedQuery') as z.infer<typeof listRolesQueryDto>;
+    const query = getValidated(c, 'validatedQuery', listRolesQueryDto);
     const queryRecord: Record<string, string | undefined> = {};
     if (query.page) queryRecord.page = query.page;
     if (query.pageSize) queryRecord.pageSize = query.pageSize;
@@ -48,7 +47,7 @@ rolesRouter.post(
   rbacGuard,
   validateBody(createRoleDto),
   async (c) => {
-    const data = (c as any).get('validatedBody') as z.infer<typeof createRoleDto>;
+    const data = getValidated(c, 'validatedBody', createRoleDto);
     const role = await roleService.create(data);
     return created(c, role);
   }
@@ -61,8 +60,8 @@ rolesRouter.put(
   validateParams(roleIdParamDto),
   validateBody(replaceRolePermissionsDto),
   async (c) => {
-    const { id } = (c as any).get('validatedParams') as { id: string };
-    const body = (c as any).get('validatedBody') as z.infer<typeof replaceRolePermissionsDto>;
+    const { id } = getValidated(c, 'validatedParams', roleIdParamDto);
+    const body = getValidated(c, 'validatedBody', replaceRolePermissionsDto);
     const role = await roleService.replacePermissions(id, body.permissionIds);
     return ok(c, role);
   }
@@ -74,7 +73,7 @@ rolesRouter.get(
   rbacGuard,
   validateParams(roleIdParamDto),
   async (c) => {
-    const { id } = (c as any).get('validatedParams') as { id: string };
+    const { id } = getValidated(c, 'validatedParams', roleIdParamDto);
     const role = await roleService.getById(id);
     return ok(c, role);
   }
@@ -87,8 +86,8 @@ rolesRouter.put(
   validateParams(roleIdParamDto),
   validateBody(updateRoleDto),
   async (c) => {
-    const { id } = (c as any).get('validatedParams') as { id: string };
-    const data = (c as any).get('validatedBody') as z.infer<typeof updateRoleDto>;
+    const { id } = getValidated(c, 'validatedParams', roleIdParamDto);
+    const data = getValidated(c, 'validatedBody', updateRoleDto);
     const role = await roleService.update(id, data);
     return ok(c, role);
   }
@@ -100,7 +99,7 @@ rolesRouter.delete(
   rbacGuard,
   validateParams(roleIdParamDto),
   async (c) => {
-    const { id } = (c as any).get('validatedParams') as { id: string };
+    const { id } = getValidated(c, 'validatedParams', roleIdParamDto);
     await roleService.delete(id);
     return noContent(c);
   }

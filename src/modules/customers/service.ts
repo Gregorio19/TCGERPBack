@@ -1,8 +1,35 @@
 import { db } from '../../lib/db.js';
 import { AppError, ErrorCodes } from '../../lib/errors.js';
-import { PaginationParams, buildPaginatedResponse } from '../../lib/pagination.js';
+import { PaginationParams, buildPaginatedResponse, parsePagination } from '../../lib/pagination.js';
 import { mapVisitAttachment } from './visit-attachments-service.js';
 import { CustomerStatus, Prisma, type CustomerVisitType } from '@prisma/client';
+import type { z } from 'zod';
+import type { listCustomersQueryDto } from './dto.js';
+
+export function parseCustomersListQuery(query: z.output<typeof listCustomersQueryDto>) {
+  const queryRecord: Record<string, string | undefined> = {};
+  if (query.page) queryRecord.page = query.page;
+  if (query.limit) queryRecord.limit = query.limit;
+  if (query.pageSize) queryRecord.pageSize = query.pageSize;
+  if (query.sortBy) queryRecord.sortBy = query.sortBy;
+  if (query.sortOrder) queryRecord.sortOrder = query.sortOrder;
+  if (query.sortDir) queryRecord.sortDir = query.sortDir;
+  if (query.search) queryRecord.search = query.search;
+  if (query.q) queryRecord.q = query.q;
+
+  const pagination = parsePagination(queryRecord);
+  const filters = {
+    estado: query.estado,
+    canalComunicacion: query.canalComunicacion,
+    recibirPromociones: query.recibirPromociones,
+    dateFrom: query.dateFrom,
+    dateTo: query.dateTo,
+    region: query.region,
+    ciudad: query.ciudad,
+  };
+
+  return { ...pagination, ...filters };
+}
 
 const visitInclude = {
   usuario: { select: { nombre: true, username: true } },
@@ -376,12 +403,13 @@ export const customerService = {
   async createVisit(
     customerId: string,
     usuarioId: string,
-    data: { descripcion: string; fecha?: Date; tipo?: CustomerVisitType }
+    data: { descripcion: string; fecha?: Date | string; tipo?: CustomerVisitType }
   ) {
     await this.getById(customerId);
 
+    const fecha = typeof data.fecha === 'string' ? new Date(data.fecha) : data.fecha;
     const visit = await db.customerVisit.create({
-      data: { customerId, usuarioId, ...data, fecha: data.fecha ?? new Date() },
+      data: { customerId, usuarioId, ...data, fecha: fecha ?? new Date() },
       include: visitInclude,
     });
 
@@ -391,12 +419,16 @@ export const customerService = {
   async updateVisit(
     customerId: string,
     visitId: string,
-    data: { descripcion?: string; fecha?: Date; tipo?: CustomerVisitType }
+    data: { descripcion?: string; fecha?: Date | string; tipo?: CustomerVisitType }
   ) {
+    const { fecha, ...changes } = data;
     try {
       const visit = await db.customerVisit.update({
         where: { id: visitId, customerId },
-        data,
+        data: {
+          ...changes,
+          ...(fecha !== undefined && { fecha: typeof fecha === 'string' ? new Date(fecha) : fecha }),
+        },
         include: visitInclude,
       });
       return mapVisit(visit);

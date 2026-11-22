@@ -1,8 +1,37 @@
 import { db } from '../../lib/db.js';
 import { AppError, ErrorCodes } from '../../lib/errors.js';
-import { PaginationParams, buildPaginatedResponse } from '../../lib/pagination.js';
+import { PaginationParams, buildPaginatedResponse, parsePagination } from '../../lib/pagination.js';
 import { Prisma } from '@prisma/client';
 import { applyStockChange, userBranchId } from '../inventory/stock.js';
+import type { z } from 'zod';
+import type { listProductsQueryDto } from './dto.js';
+
+export function parseProductsListQuery(query: z.output<typeof listProductsQueryDto>) {
+  const queryRecord: Record<string, string | undefined> = {};
+  if (query.page) queryRecord.page = query.page;
+  if (query.limit) queryRecord.limit = query.limit;
+  if (query.pageSize) queryRecord.pageSize = query.pageSize;
+  if (query.sortBy) queryRecord.sortBy = query.sortBy;
+  if (query.sortOrder) queryRecord.sortOrder = query.sortOrder;
+  if (query.sortDir) queryRecord.sortDir = query.sortDir;
+  if (query.search) queryRecord.search = query.search;
+  if (query.q) queryRecord.q = query.q;
+  const pagination = parsePagination(queryRecord);
+  const filters = {
+    category: query.category,
+    juego: query.juego,
+    rareza: query.rareza,
+    idioma: query.idioma,
+    condicion: query.condicion,
+    tipo: query.tipo,
+    precioMin: query.precioMin ? parseInt(query.precioMin, 10) : undefined,
+    precioMax: query.precioMax ? parseInt(query.precioMax, 10) : undefined,
+    // Frontend envía stockMinimo o stockDisponible
+    stockDisponible: (query.stockDisponible === 'true' || query.stockMinimo === 'true'),
+  };
+
+  return { ...pagination, ...filters };
+}
 
 export const productService = {
   async list(params: PaginationParams & {

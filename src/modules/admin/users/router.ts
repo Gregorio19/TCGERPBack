@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { authJWT } from '../../../middlewares/auth-jwt.js';
 import { rbacGuard } from '../../../middlewares/rbac-guard.js';
-import { validateBody, validateQuery, validateParams } from '../../../lib/validation.js';
+import { getValidated, validateBody, validateQuery, validateParams } from '../../../lib/validation.js';
 import {
   createUserDto,
   updateUserDto,
@@ -12,7 +12,6 @@ import {
 import { userService } from './service.js';
 import { ok, created, noContent } from '../../../lib/responses.js';
 import { parsePagination } from '../../../lib/pagination.js';
-import { z } from 'zod';
 
 export const usersRouter = new Hono();
 
@@ -22,7 +21,7 @@ usersRouter.get(
   rbacGuard,
   validateQuery(listUsersQueryDto),
   async (c) => {
-    const query = (c as any).get('validatedQuery') as z.infer<typeof listUsersQueryDto>;
+    const query = getValidated(c, 'validatedQuery', listUsersQueryDto);
     const queryRecord: Record<string, string | undefined> = {};
     if (query.page) queryRecord.page = query.page;
     if (query.pageSize) queryRecord.pageSize = query.pageSize;
@@ -52,7 +51,7 @@ usersRouter.post(
   rbacGuard,
   validateBody(createUserDto),
   async (c) => {
-    const data = (c as any).get('validatedBody') as z.infer<typeof createUserDto>;
+    const data = getValidated(c, 'validatedBody', createUserDto);
     const user = await userService.create(data);
     return created(c, user);
   }
@@ -64,7 +63,7 @@ usersRouter.get(
   rbacGuard,
   validateParams(userIdParamDto),
   async (c) => {
-    const { id } = (c as any).get('validatedParams') as { id: string };
+    const { id } = getValidated(c, 'validatedParams', userIdParamDto);
     const user = await userService.getById(id);
     return ok(c, user);
   }
@@ -77,8 +76,8 @@ usersRouter.put(
   validateParams(userIdParamDto),
   validateBody(changePasswordDto),
   async (c) => {
-    const { id } = (c as any).get('validatedParams') as { id: string };
-    const { newPassword } = (c as any).get('validatedBody') as z.infer<typeof changePasswordDto>;
+    const { id } = getValidated(c, 'validatedParams', userIdParamDto);
+    const { newPassword } = getValidated(c, 'validatedBody', changePasswordDto);
     const user = await userService.changePassword(id, newPassword);
     return ok(c, user);
   }
@@ -91,8 +90,8 @@ usersRouter.put(
   validateParams(userIdParamDto),
   validateBody(updateUserDto),
   async (c) => {
-    const { id } = (c as any).get('validatedParams') as { id: string };
-    const data = (c as any).get('validatedBody') as z.infer<typeof updateUserDto>;
+    const { id } = getValidated(c, 'validatedParams', userIdParamDto);
+    const data = getValidated(c, 'validatedBody', updateUserDto);
     const user = await userService.update(id, data);
     return ok(c, user);
   }
@@ -104,7 +103,7 @@ usersRouter.delete(
   rbacGuard,
   validateParams(userIdParamDto),
   async (c) => {
-    const { id } = (c as any).get('validatedParams') as { id: string };
+    const { id } = getValidated(c, 'validatedParams', userIdParamDto);
     await userService.delete(id);
     return noContent(c);
   }
