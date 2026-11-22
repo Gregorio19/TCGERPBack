@@ -69,7 +69,7 @@ it('registra devoluciones, crédito en tienda y compras al cliente con sus efect
       clienteId: customerId, sucursalId: branchId, canal: 'tienda_fisica', tipoDocumento: 'boleta',
       estado: 'completada', descuentoGeneral: 101,
       items: [{ productId, cantidad: 3, precioUnitario: 1000, descuento: 100 }],
-      payments: [{ method: 'efectivo', amount: 3331 }],
+      payments: [{ method: 'efectivo', amount: 2799 }],
     }), 201);
     assert.equal(await stock(), 3);
     const path = `/api/orders/${order.id}/returns`;
@@ -86,7 +86,7 @@ it('registra devoluciones, crédito en tienda y compras al cliente con sus efect
     const [partial, replay] = await Promise.all(attempts.map(async (response) =>
       await response.json() as { refundAmount: number; cashSessionId: string }));
     assert.deepEqual(replay, partial);
-    assert.equal(partial.refundAmount, 1110);
+    assert.equal(partial.refundAmount, 933);
     assert.equal(partial.cashSessionId, session.id);
     assert.equal(await stock(), 4);
     assert.equal(await db.return.count({ where: { orderId: order.id } }), 1);
@@ -100,12 +100,12 @@ it('registra devoluciones, crédito en tienda y compras al cliente con sus efect
     const full = await expectJson(await post(path, {
       reason: 'Resto de la orden', refundMethod: 'debito', items: [{ orderItemId, quantity: 2 }],
     }, randomUUID()), 201);
-    assert.equal(full.refundAmount, 2221);
+    assert.equal(full.refundAmount, 1866);
     assert.equal(await stock(), 6);
     const returned = await expectJson(await requestAsAdmin(`/api/orders/${order.id}`), 200);
     assert.equal(returned.estado, 'devuelta');
     assert.deepEqual(returned.payments.map((payment: { amount: number }) => payment.amount).sort((a: number, b: number) => a - b),
-      [-2221, -1110, 3331]);
+      [-1866, -933, 2799]);
     assert.equal((await expectJson(await requestAsAdmin(path), 200)).length, 2);
     assert.equal(await db.stockMovement.count({ where: { productId, type: 'devolucion' } }), 2);
   });
@@ -115,7 +115,7 @@ it('registra devoluciones, crédito en tienda y compras al cliente con sus efect
       clienteId: customerId, sucursalId: branchId, items: [{ productId, cantidad: 1 }],
     };
     const first = await expectJson(await post('/api/pos/sale', {
-      ...sale, payments: [{ method: 'debito', amount: 1190 }],
+      ...sale, payments: [{ method: 'debito', amount: 1000 }],
     }), 201);
     const order = await expectJson(await requestAsAdmin(`/api/orders/${first.ordenId}`), 200);
     const returnPath = `/api/orders/${order.id}/returns`;
@@ -126,16 +126,16 @@ it('registra devoluciones, crédito en tienda y compras al cliente con sus efect
     await expectJson(await post(returnPath, refund, returnKey), 409);
     const returned = await expectJson(await post(returnPath, refund, randomUUID()), 201);
     const credit = await expectJson(await requestAsAdmin(creditPath), 200);
-    assert.equal(credit.balance, 1190);
+    assert.equal(credit.balance, 1000);
     assert.equal(credit.movements[0].refId, returned.id);
     assert.equal(await db.payment.count({ where: { orderId: order.id } }), 1);
 
-    const payment = { ...sale, payments: [{ method: 'credito_tienda', amount: 1190 }] };
+    const payment = { ...sale, payments: [{ method: 'credito_tienda', amount: 1000 }] };
     const responses = await Promise.all([post('/api/pos/sale', payment), post('/api/pos/sale', payment)]);
     assert.deepEqual(responses.map((response) => response.status).sort(), [201, 409]);
     const debited = await expectJson(await requestAsAdmin(creditPath), 200);
     assert.equal(debited.balance, 0);
-    assert.equal(debited.movements[0].amount, -1190);
+    assert.equal(debited.movements[0].amount, -1000);
     assert.equal(await stock(), 5);
   });
 
@@ -154,19 +154,19 @@ it('registra devoluciones, crédito en tienda y compras al cliente con sus efect
     assert.equal((await expectJson(await requestAsAdmin(purchasePath), 200))[0].id, purchase.id);
 
     const rejected = await expectJson(await post(purchasePath, {
-      branchId, paymentMethod: 'efectivo', items: [{ productId, quantity: 1, unitPrice: 7022 }],
+      branchId, paymentMethod: 'efectivo', items: [{ productId, quantity: 1, unitPrice: 6667 }],
     }), 409);
-    assert.equal(rejected.error.message, 'Efectivo insuficiente en caja (disponible $7021)');
+    assert.equal(rejected.error.message, 'Efectivo insuficiente en caja (disponible $6666)');
     assert.equal(await db.customerPurchase.count({ where: { customerId } }), 1);
     assert.equal(await stock(), 7);
 
     const summary = await expectJson(await requestAsAdmin(`/api/cash-sessions/${session.id}/summary`), 200);
-    assert.equal(summary.cashSales, 3331);
-    assert.equal(summary.cashRefunds, 1110);
+    assert.equal(summary.cashSales, 2799);
+    assert.equal(summary.cashRefunds, 933);
     assert.equal(summary.cashCustomerPurchases, 200);
-    assert.equal(summary.expectedAmount, 7021);
-    const closed = await expectJson(await post(`/api/cash-sessions/${session.id}/close`, { countedAmount: 7021 }), 200);
-    assert.equal(closed.expectedAmount, 7021);
+    assert.equal(summary.expectedAmount, 6666);
+    const closed = await expectJson(await post(`/api/cash-sessions/${session.id}/close`, { countedAmount: 6666 }), 200);
+    assert.equal(closed.expectedAmount, 6666);
     assert.equal(closed.difference, 0);
   });
 
@@ -175,10 +175,10 @@ it('registra devoluciones, crédito en tienda y compras al cliente con sus efect
     assert.deepEqual(alerts.items.find((item: { productId: number }) => item.productId === productId),
       { productId, nombre: 'Carta B3', branchId, cantidad: 7, minimo: 8 });
     const kpis = await expectJson(await requestAsAdmin(`/api/dashboard/kpis?branchId=${branchId}`), 200);
-    assert.equal(kpis.ventasMes, 1190);
+    assert.equal(kpis.ventasMes, 1000);
     assert.equal(typeof kpis.ventasHoy, 'number');
     assert.equal(typeof kpis.clientesNuevosMes, 'number');
-    assert.equal(kpis.ticketPromedioMes, 397);
+    assert.equal(kpis.ticketPromedioMes, 333);
     assert.equal(kpis.unidadesMes, 1);
     assert.equal(kpis.stockCritico, alerts.count);
     assert.deepEqual(kpis.topProductosMes[0], { productId, nombre: 'Carta B3', unidades: 1 });
@@ -204,7 +204,7 @@ it('registra devoluciones, crédito en tienda y compras al cliente con sus efect
     const order = await expectJson(await post('/api/orders', {
       clienteId: customerId, sucursalId: branchId, canal: 'tienda_fisica', tipoDocumento: 'boleta',
       estado: 'completada', items: [{ productId, cantidad: 1, precioUnitario: 1000 }],
-      payments: [{ method: 'debito', amount: 1190 }],
+      payments: [{ method: 'debito', amount: 1000 }],
     }), 201);
     const error = await expectJson(await post(`/api/orders/${order.id}/returns`, {
       reason: 'Reembolso en efectivo', refundMethod: 'efectivo',

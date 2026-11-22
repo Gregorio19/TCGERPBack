@@ -5,6 +5,7 @@ import { Prisma, OrderStatus, OrderChannel, DocType } from '@prisma/client';
 import { applyStockChange, userBranchId } from '../inventory/stock.js';
 import { lockOpenCashSession } from '../cash-sessions/service.js';
 import { applyStoreCredit, requireStoreCreditCustomer } from '../customers/store-credit.js';
+import { calculateOrderTotals } from './totals.js';
 import { preparePayments, type PaymentInput } from './payments.js';
 
 // Función para generar número de orden único
@@ -19,36 +20,6 @@ async function generateOrderNumber(tx: Prisma.TransactionClient): Promise<string
     FROM orders WHERE numero LIKE ${period + '-%'}
   `;
   return `${period}-${String(sequence).padStart(4, '0')}`;
-}
-
-// Función para calcular totales de una orden
-function calculateOrderTotals(items: Array<{
-  cantidad: number;
-  precioUnitario: number;
-  descuento?: number;
-}>, descuentoGeneral: number = 0, costoEnvio: number = 0) {
-  // Calcular subtotal de items
-  const subtotal = items.reduce((sum, item) => {
-    const itemSubtotal = item.precioUnitario * item.cantidad;
-    const itemDescuento = item.descuento || 0;
-    return sum + itemSubtotal - itemDescuento;
-  }, 0);
-
-  // Subtotal con descuento general
-  const subtotalConDescuento = subtotal - descuentoGeneral;
-
-  // IVA (19%)
-  const montoIva = Math.round(subtotalConDescuento * 0.19);
-
-  // Total final
-  const total = subtotalConDescuento + montoIva + costoEnvio;
-
-  return {
-    subtotal,
-    subtotalConDescuento,
-    montoIva,
-    total,
-  };
 }
 
 // Validar transiciones de estado
@@ -163,7 +134,8 @@ async function createOrder(
   }
 
   const totals = calculateOrderTotals(data.items, data.descuentoGeneral, data.costoEnvio);
-  if (totals.total <= 0 || Object.values(totals).some((value) => value > 2147483647)) {
+  // Mercancía con descuentos debe quedar positiva: el envío no compensa un IVA negativo.
+  if (totals.subtotalConDescuento <= 0 || Object.values(totals).some((value) => value > 2147483647)) {
     throw new AppError(ErrorCodes.BAD_REQUEST, 'Total de orden fuera de rango', 400);
   }
   const payment = data.payments && preparePayments(data.payments, totals.total, cashSessionId);
@@ -186,7 +158,10 @@ async function createOrder(
       estado: data.estado ?? 'pendiente',
       descuentoGeneral: data.descuentoGeneral,
       costoEnvio: data.costoEnvio,
-      ...totals,
+      subtotal: totals.subtotal,
+      subtotalConDescuento: totals.subtotalConDescuento,
+      montoIva: totals.montoIva,
+      total: totals.total,
       items: { create: orderItems(data.items) },
       payments: payment && { create: payment.applied },
     },
@@ -462,6 +437,9 @@ export const orderService = {
         descuentoGeneral ?? existing.descuentoGeneral,
         costoEnvio ?? existing.costoEnvio
       ) : undefined;
+      if (totals && totals.subtotalConDescuento <= 0) {
+        throw new AppError(ErrorCodes.BAD_REQUEST, 'Total de orden fuera de rango', 400);
+      }
       if (totals && existing.payments.length && totals.total !== existing.total) {
         throw new AppError(ErrorCodes.BAD_REQUEST, 'La suma de los pagos debe coincidir con el total de la orden', 400);
       }
@@ -492,7 +470,12 @@ export const orderService = {
       const result = await tx.order.update({
         where: { id },
         data: {
-          ...fields, ...totals, estado, descuentoGeneral, costoEnvio,
+          ...fields,
+          subtotal: totals?.subtotal,
+          subtotalConDescuento: totals?.subtotalConDescuento,
+          montoIva: totals?.montoIva,
+          total: totals?.total,
+          estado, descuentoGeneral, costoEnvio,
           items: items && { create: orderItems(items) },
           payments: payment && { create: payment.applied },
         },

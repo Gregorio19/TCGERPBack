@@ -59,6 +59,7 @@ posRouter.post('/sale', authJWT, rbacGuard, validateBody(posSaleDto), async (c) 
     ordenId: order.id,
     numero: order.numero,
     total: order.total,
+    montoIva: order.montoIva,
     estado: order.estado,
     cliente: cliente && {
       id: cliente.id,

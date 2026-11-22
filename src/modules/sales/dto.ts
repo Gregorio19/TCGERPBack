@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { uuidSchema, clpSchema } from '../../lib/validation.js';
 
+import { calculateOrderTotals } from './totals.js';
 import { paymentsDto } from './payments.js';
 
 // Enums
@@ -60,25 +61,7 @@ export const createOrderDto = z
     estado: OrderStatusEnum.optional().default('pendiente'),
   })
   .refine(
-    (data) => {
-      // Calcular total de items
-      const itemsTotal = data.items.reduce((sum, item) => {
-        const itemSubtotal = item.precioUnitario * item.cantidad;
-        const itemDescuento = item.descuento || 0;
-        return sum + itemSubtotal - itemDescuento;
-      }, 0);
-
-      // Calcular subtotal con descuento general
-      const subtotalConDescuento = itemsTotal - (data.descuentoGeneral || 0);
-      
-      // Calcular IVA (19% sobre subtotal con descuento)
-      const montoIva = Math.round(subtotalConDescuento * 0.19);
-      
-      // Total final
-      const total = subtotalConDescuento + montoIva + (data.costoEnvio || 0);
-      
-      return total > 0;
-    },
+    (data) => calculateOrderTotals(data.items, data.descuentoGeneral, data.costoEnvio).total > 0,
     {
       message: 'El total de la orden debe ser mayor a 0',
     }

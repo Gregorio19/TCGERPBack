@@ -1,3 +1,4 @@
+import { calculateOrderTotals } from './totals.js';
 import assert from 'node:assert/strict';
 import { randomInt, randomUUID } from 'node:crypto';
 import { it } from 'node:test';
@@ -74,7 +75,7 @@ it('POS: exige caja, registra pagos y stock de forma atómica y permite cuadrar 
     clienteId: customerId, sucursalId: branchId, canal: 'online', tipoDocumento: 'boleta',
     estado: 'pendiente', items: [{ productId, cantidad: 1, precioUnitario: 1000 }],
   };
-  const cashPayment = [{ method: 'efectivo', amount: 1190 }];
+  const cashPayment = [{ method: 'efectivo', amount: 1000 }];
   await t.test('rechaza crear órdenes pendientes o completadas con efectivo sin caja', async () => {
     for (const estado of ['pendiente', 'completada']) {
       const error = await expectJson(await post('/api/orders', { ...pendingOrder, estado, payments: cashPayment }), 409);
@@ -88,9 +89,10 @@ it('POS: exige caja, registra pagos y stock de forma atómica y permite cuadrar 
   await t.test('completa una venta con pagos mixtos, vuelto y vendedor', async () => {
     const result = await expectJson(await post(salePath, sale), 201);
     assert.equal(result.estado, 'completada');
-    assert.equal(result.total, 2380);
+    assert.equal(result.total, 2000);
+    assert.equal(result.montoIva, 319);
     assert.equal(result.amountTendered, 2000);
-    assert.equal(result.change, 620);
+    assert.equal(result.change, 1000);
     assert.equal(result.vendedorId, admin.id);
     assert.deepEqual(result.vendedor, { id: admin.id, nombre: admin.nombre });
 
@@ -99,10 +101,11 @@ it('POS: exige caja, registra pagos y stock de forma atómica y permite cuadrar 
       include: { payments: { orderBy: { method: 'asc' } } },
     });
     assert.equal(order.vendedorId, admin.id);
+    assert.equal(order.montoIva, result.montoIva);
     assert.deepEqual(order.payments.map(({ method, amount, cashSessionId, reference }) => (
       { method, amount, cashSessionId, reference }
     )), [
-      { method: 'efectivo', amount: 1380, cashSessionId: session.id, reference: null },
+      { method: 'efectivo', amount: 1000, cashSessionId: session.id, reference: null },
       { method: 'debito', amount: 1000, cashSessionId: session.id, reference: 'TBK-001' },
     ]);
     const stock = await db.stockByBranch.findUniqueOrThrow({
@@ -138,7 +141,7 @@ it('POS: exige caja, registra pagos y stock de forma atómica y permite cuadrar 
     const error = await expectJson(await post(salePath, {
       ...sale,
       items: [{ productId: secondProductId, cantidad: 1 }, { productId, cantidad: 4 }],
-      payments: [{ method: 'debito', amount: 5950 }],
+      payments: [{ method: 'debito', amount: 5000 }],
     }), 409);
     assert.equal(error.error.message, 'Stock insuficiente para Producto POS');
     assert.deepEqual(await snapshot(), before);
@@ -146,9 +149,9 @@ it('POS: exige caja, registra pagos y stock de forma atómica y permite cuadrar 
 
   await t.test('rechaza la suma incorrecta y el crédito en tienda insuficiente', async () => {
     const before = await snapshot();
-    await expectJson(await post(salePath, { ...sale, payments: [{ method: 'debito', amount: 2379 }] }), 400);
+    await expectJson(await post(salePath, { ...sale, payments: [{ method: 'debito', amount: 1999 }] }), 400);
     const error = await expectJson(await post(salePath, {
-      ...sale, payments: [{ method: 'credito_tienda', amount: 2380 }],
+      ...sale, payments: [{ method: 'credito_tienda', amount: 2000 }],
     }), 409);
     assert.equal(error.error.message, 'Crédito en tienda insuficiente');
     assert.deepEqual(await snapshot(), before);
@@ -156,15 +159,15 @@ it('POS: exige caja, registra pagos y stock de forma atómica y permite cuadrar 
 
   await t.test('cuadra la caja con el efectivo aplicado y cuenta una sola venta', async () => {
     const closed = await expectJson(await post(`/api/cash-sessions/${session.id}/close`, {
-      countedAmount: 6400, notes: 'Cuadre de prueba',
+      countedAmount: 6020, notes: 'Cuadre de prueba',
     }), 200);
     assert.equal(closed.status, 'cerrada');
-    assert.equal(closed.expectedAmount, 6380);
+    assert.equal(closed.expectedAmount, 6000);
     assert.equal(closed.difference, 20);
     assert.equal(closed.closedById, admin.id);
     const summary = await expectJson(await requestAsAdmin(`/api/cash-sessions/${session.id}/summary`), 200);
     assert.equal(summary.salesCount, 1);
-    assert.equal(summary.totalsByMethod.efectivo, 1380);
+    assert.equal(summary.totalsByMethod.efectivo, 1000);
     assert.equal(summary.totalsByMethod.debito, 1000);
   });
   await t.test('completa una orden sin pagos una sola vez aunque se reintente', async () => {
@@ -221,7 +224,7 @@ it('POS: exige caja, registra pagos y stock de forma atómica y permite cuadrar 
     const result = await expectJson(await post(salePath, {
       sucursalId: branchId,
       items: [{ productId: secondProductId, cantidad: 1 }],
-      payments: [{ method: 'debito', amount: 1190 }],
+      payments: [{ method: 'debito', amount: 1000 }],
     }), 201);
     assert.equal(result.cliente, null);
     const order = await db.order.findUniqueOrThrow({ where: { id: result.ordenId } });
@@ -233,7 +236,7 @@ it('POS: exige caja, registra pagos y stock de forma atómica y permite cuadrar 
     const error = await expectJson(await post(salePath, {
       sucursalId: branchId,
       items: [{ productId, cantidad: 1 }],
-      payments: [{ method: 'credito_tienda', amount: 1190 }],
+      payments: [{ method: 'credito_tienda', amount: 1000 }],
     }), 400);
     assert.equal(error.error.message, 'Crédito en tienda requiere un cliente');
     assert.equal(await db.order.count({ where: { sucursalId: branchId } }), before);
@@ -251,4 +254,16 @@ it('crea un cliente solo con nombre y teléfono y exige al menos un identificado
   assert.equal(customer.telefono, '+56 9 1234 5678');
   assert.equal(customer.apellido, null);
   assert.equal(customer.rut, null);
+});
+
+it('desglosa el IVA incluido en un precio de $75.000', () => {
+  const { total, neto, montoIva } = calculateOrderTotals([{ precioUnitario: 75000, cantidad: 1 }]);
+  assert.deepEqual({ total, neto, montoIva }, { total: 75000, neto: 63025, montoIva: 11975 });
+});
+
+it('descuenta las líneas y la orden antes de desglosar el IVA y sumar el envío', () => {
+  const totals = calculateOrderTotals([{ precioUnitario: 1000, cantidad: 3, descuento: 100 }], 101, 500);
+  assert.deepEqual(totals, {
+    subtotal: 2900, subtotalConDescuento: 2799, neto: 2352, montoIva: 447, total: 3299,
+  });
 });
