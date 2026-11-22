@@ -88,20 +88,9 @@ Catálogo completo de errores:
 - Autenticación (401/403): 6 códigos
 - Servidor (500): 4 códigos
 
-### 6. `rbac.json`
-Matriz de permisos por rol:
-- **Admin**: Acceso completo
-- **Cajero**: Ventas y POS
-- **Bodeguero**: Inventario y recepciones
-- **Contador**: Contabilidad
-- **RRHH**: Empleados y nómina
-- **Viewer**: Solo lectura
+### 6. `permissions-canonical.json`
 
-**Recursos con permisos:**
-- products, inventory, recepciones, transferencias, proveedores
-- sales, orders, customers
-- accounting, rrhh, admin
-- reports, forecast
+Catálogo de permisos para el frontend y la API. El seed reconcilia el catálogo en la base de datos y asigna todos los permisos al rol Admin. Cada endpoint protegido requiere el permiso indicado en [el mapa de rutas](../src/middlewares/route-permissions.ts).
 
 ### 7. `seeds.json`
 Datos de ejemplo consolidados:

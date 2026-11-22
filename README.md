@@ -87,7 +87,7 @@ back/
 │   ├── openapi.yaml
 │   ├── resources.json
 │   ├── validation.json
-│   ├── rbac.json
+│   ├── permissions-canonical.json
 │   └── seeds.json
 ├── package.json
 ├── tsconfig.json
@@ -184,7 +184,7 @@ Todas las especificaciones están en `/api-spec`:
 - `openapi.yaml` - Especificación OpenAPI 3.1 (~140 endpoints)
 - `resources.json` - Catálogo de recursos
 - `validation.json` - Reglas de validación
-- `rbac.json` - Control de acceso basado en roles
+- `permissions-canonical.json` - Catálogo de permisos asignables a roles en la base de datos
 - `seeds.json` - Datos de ejemplo
 - `filters-and-pagination.md` - Convenciones de paginación
 - `errors.md` - Catálogo de errores

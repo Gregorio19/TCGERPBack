@@ -2,14 +2,17 @@ import { Hono } from 'hono';
 import { validateBody } from '../../lib/validation.js';
 import { z } from 'zod';
 import { db } from '../../lib/db.js';
-import { generateToken, comparePassword } from '../../lib/auth.js';
+import { generateToken, comparePassword, JWTPayload } from '../../lib/auth.js';
 import { AppError, ErrorCodes } from '../../lib/errors.js';
 import { ok } from '../../lib/responses.js';
 import { authJWT } from '../../middlewares/auth-jwt.js';
 import { getEffectivePermissionNamesForUserId } from '../../lib/user-permissions.js';
-import { issueRefreshToken, consumeRefreshToken } from '../../lib/refresh-token.js';
+import { issueRefreshToken, consumeRefreshToken, revokeRefreshToken } from '../../lib/refresh-token.js';
+import { verifyLogin } from '../../lib/login-rate-limit.js';
 
-export const authRouter = new Hono();
+export const authRouter = new Hono<{ Variables: { validatedBody: unknown; user: JWTPayload } }>();
+
+const DUMMY_PASSWORD_HASH = '$2a$10$Atju59QNiuc9NUD7deFoKO6jBEYqfWcaKxfvFCeAj8PW7bGKR0PU6';
 
 const loginDto = z.object({
   username: z.string().min(1),
@@ -21,29 +24,16 @@ const refreshDto = z.object({
 });
 
 authRouter.post('/login', validateBody(loginDto), async (c) => {
-  const { username, password } = (c as any).get('validatedBody') as z.infer<typeof loginDto>;
-
-  // Buscar usuario
-  const user = await db.user.findUnique({
-    where: { username },
-    include: {
-      userRoles: {
-        include: {
-          role: true,
-        },
-      },
-    },
+  const { username, password } = c.get('validatedBody') as z.infer<typeof loginDto>;
+  const ip = c.req.header('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+  const user = await verifyLogin(ip, username, async () => {
+    const candidate = await db.user.findUnique({
+      where: { username },
+      include: { userRoles: { include: { role: true } } },
+    });
+    const isValid = await comparePassword(password, candidate?.passwordHash ?? DUMMY_PASSWORD_HASH);
+    return isValid && candidate?.activo && !candidate.deletedAt ? candidate : null;
   });
-
-  if (!user || !user.activo) {
-    throw new AppError(ErrorCodes.UNAUTHORIZED, 'Credenciales inválidas', 401);
-  }
-
-  // Verificar contraseña
-  const isValid = await comparePassword(password, user.passwordHash);
-  if (!isValid) {
-    throw new AppError(ErrorCodes.UNAUTHORIZED, 'Credenciales inválidas', 401);
-  }
 
   // Obtener el primer rol del usuario (o 'Viewer' por defecto)
   const role = user.userRoles[0]?.role?.nombre || 'Viewer';
@@ -75,9 +65,7 @@ authRouter.post('/login', validateBody(loginDto), async (c) => {
 });
 
 authRouter.post('/refresh', validateBody(refreshDto), async (c) => {
-  const { refreshToken: raw } = (c as { get: (k: string) => unknown }).get('validatedBody') as z.infer<
-    typeof refreshDto
-  >;
+  const { refreshToken: raw } = c.get('validatedBody') as z.infer<typeof refreshDto>;
 
   const userId = await consumeRefreshToken(raw);
   if (!userId) {
@@ -117,12 +105,15 @@ authRouter.post('/refresh', validateBody(refreshDto), async (c) => {
   });
 });
 
+authRouter.post('/logout', authJWT, validateBody(refreshDto), async (c) => {
+  const { refreshToken } = c.get('validatedBody') as z.infer<typeof refreshDto>;
+  const { userId } = c.get('user');
+  await revokeRefreshToken(refreshToken, userId);
+  return ok(c, { ok: true });
+});
+
 authRouter.get('/me', authJWT, async (c) => {
-  const payload = (c as { get: (k: string) => unknown }).get('user') as {
-    userId: string;
-    username: string;
-    role: string;
-  };
+  const payload = c.get('user');
   const user = await db.user.findUnique({
     where: { id: payload.userId },
     include: {

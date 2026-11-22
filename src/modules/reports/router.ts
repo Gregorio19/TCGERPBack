@@ -34,15 +34,15 @@ const exportQueryDto = z.object({
   formato: z.string().optional(),
 });
 
-reportsRouter.get('/types', authJWT, async (c) => {
+reportsRouter.get('/types', authJWT, rbacGuard, async (c) => {
   return ok(c, reportsService.types());
 });
 
-reportsRouter.get('/stats', authJWT, async (c) => {
+reportsRouter.get('/stats', authJWT, rbacGuard, async (c) => {
   return ok(c, await reportsService.stats());
 });
 
-reportsRouter.get('/recent', authJWT, validateQuery(recentQueryDto), async (c) => {
+reportsRouter.get('/recent', authJWT, rbacGuard, validateQuery(recentQueryDto), async (c) => {
   const q = (c as { get: (k: string) => unknown }).get('validatedQuery') as z.infer<typeof recentQueryDto>;
   const limit = q.limit ? parseInt(q.limit, 10) : 10;
   return ok(c, await reportsService.recent(Number.isFinite(limit) ? limit : 10));
@@ -51,6 +51,7 @@ reportsRouter.get('/recent', authJWT, validateQuery(recentQueryDto), async (c) =
 reportsRouter.get(
   '/export/:id',
   authJWT,
+  rbacGuard,
   validateParams(idParamDto),
   validateQuery(exportQueryDto),
   async (c) => {
@@ -70,7 +71,7 @@ reportsRouter.post('/generate', authJWT, rbacGuard, validateBody(generateDto), a
   return created(c, row);
 });
 
-reportsRouter.get('/', authJWT, validateQuery(listQueryDto), async (c) => {
+reportsRouter.get('/', authJWT, rbacGuard, validateQuery(listQueryDto), async (c) => {
   const q = (c as { get: (k: string) => unknown }).get('validatedQuery') as z.infer<typeof listQueryDto>;
   const queryRecord: Record<string, string | undefined> = {
     page: q.page,
@@ -81,7 +82,7 @@ reportsRouter.get('/', authJWT, validateQuery(listQueryDto), async (c) => {
   return ok(c, await reportsService.list(queryRecord));
 });
 
-reportsRouter.get('/:id', authJWT, validateParams(idParamDto), async (c) => {
+reportsRouter.get('/:id', authJWT, rbacGuard, validateParams(idParamDto), async (c) => {
   const { id } = (c as { get: (k: string) => unknown }).get('validatedParams') as { id: string };
   return ok(c, await reportsService.getById(id));
 });

@@ -1,31 +1,20 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import app from '../../app.js';
+import { requestAsAdmin } from '../../test-utils/auth.js';
 
 /** Cliente seed `api-spec/seeds.json` (Juan Pérez). */
 const CUSTOMER_ID = '550e8400-e29b-41d4-a716-446655440001';
 
 describe('Clientes — visitas (integración)', () => {
   it('crea, actualiza y filtra visitas por tipo', async () => {
-    const loginRes = await app.request('http://localhost/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: 'admin', password: 'password123' }),
-    });
-    assert.equal(loginRes.status, 200, 'login seed admin/password123');
-    const { token } = (await loginRes.json()) as { token: string };
-
     const descripcion = 'Nota de prueba\n  con espacios y segunda línea.';
     const fechaIso = new Date().toISOString();
 
-    const postRes = await app.request(
-      `http://localhost/api/customers/${CUSTOMER_ID}/visits`,
+    const postRes = await requestAsAdmin(
+      `/api/customers/${CUSTOMER_ID}/visits`,
       {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ descripcion, fecha: fechaIso }),
       }
     );
@@ -44,14 +33,11 @@ describe('Clientes — visitas (integración)', () => {
     assert.ok(created.id);
     assert.ok(created.usuario?.username);
 
-    const patchRes = await app.request(
-      'http://localhost/api/customers/' + CUSTOMER_ID + '/visits/' + created.id,
+    const patchRes = await requestAsAdmin(
+      '/api/customers/' + CUSTOMER_ID + '/visits/' + created.id,
       {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: 'Bearer ' + token,
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tipo: 'compra' }),
       }
     );
@@ -59,8 +45,8 @@ describe('Clientes — visitas (integración)', () => {
     assert.equal(patchRes.status, 200, patchText);
     assert.equal(JSON.parse(patchText).tipo, 'compra');
 
-    const listRes = await app.request(
-      `http://localhost/api/customers/${CUSTOMER_ID}/visits?page=1&limit=10&tipo=compra`
+    const listRes = await requestAsAdmin(
+      `/api/customers/${CUSTOMER_ID}/visits?page=1&limit=10&tipo=compra`
     );
     assert.equal(listRes.status, 200);
     const listJson = (await listRes.json()) as {

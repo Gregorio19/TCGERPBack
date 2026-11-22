@@ -14,6 +14,8 @@ servers:
     description: Desarrollo local
 
 tags:
+  - name: auth
+    description: Autenticación y sesiones
   - name: products
     description: Gestión de productos TCG
   - name: inventory
@@ -159,7 +161,63 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
 
+    Forbidden:
+      description: La sesión no tiene el permiso requerido
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    TooManyLoginAttempts:
+      description: Demasiados intentos de inicio de sesión para esta IP y usuario
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
   schemas:
+    RefreshTokenRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken:
+          type: string
+          minLength: 1
+    AuthUser:
+      type: object
+      required: [id, username, email, nombre, apellido, role, permissions]
+      properties:
+        id:
+          type: string
+          format: uuid
+        username:
+          type: string
+        email:
+          type: string
+          format: email
+        nombre:
+          type: string
+        apellido:
+          type: string
+        role:
+          type: string
+        permissions:
+          type: array
+          items:
+            type: string
+    AuthSession:
+      type: object
+      required: [token, refreshToken, expiresIn, user]
+      properties:
+        token:
+          type: string
+          description: Token de acceso JWT
+        refreshToken:
+          type: string
+        expiresIn:
+          type: integer
+          description: Vigencia del token de acceso en segundos
+        user:
+          $ref: '#/components/schemas/AuthUser'
     ErrorResponse:
       type: object
       required:
@@ -2255,6 +2313,140 @@ components:
             $ref: '#/components/schemas/ChartTrendRow'
 
 paths:
+  /health:
+    get:
+      summary: Comprobar el estado de la base de datos
+      servers:
+        - url: https://api.tcg-erp.com
+        - url: http://localhost:3001
+      security: []
+      responses:
+        '200':
+          description: Base de datos disponible
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, db]
+                properties:
+                  status:
+                    const: ok
+                  db:
+                    const: ok
+        '503':
+          description: Base de datos no disponible
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, db]
+                properties:
+                  status:
+                    const: degraded
+                  db:
+                    const: error
+
+  /auth/login:
+    post:
+      tags: [auth]
+      summary: Iniciar sesión
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username:
+                  type: string
+                  minLength: 1
+                password:
+                  type: string
+                  minLength: 1
+                  format: password
+      responses:
+        '200':
+          description: Sesión creada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthSession'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/Error422'
+        '429':
+          $ref: '#/components/responses/TooManyLoginAttempts'
+
+  /auth/refresh:
+    post:
+      tags: [auth]
+      summary: Renovar la sesión y rotar el refresh token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshTokenRequest'
+      responses:
+        '200':
+          description: Sesión renovada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthSession'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/Error422'
+
+  /auth/logout:
+    post:
+      tags: [auth]
+      summary: Revocar el refresh token de la sesión del usuario
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshTokenRequest'
+      responses:
+        '200':
+          description: Solicitud de revocación procesada
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok:
+                    const: true
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/Error422'
+
+  /auth/me:
+    get:
+      tags: [auth]
+      summary: Consultar el perfil y los permisos de la sesión
+      responses:
+        '200':
+          description: Usuario de la sesión
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [user]
+                properties:
+                  user:
+                    $ref: '#/components/schemas/AuthUser'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
   # PRODUCTOS
   /products:
     get:
@@ -2300,6 +2492,10 @@ paths:
                         type: array
                         items:
                           $ref: '#/components/schemas/Product'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     post:
       tags: [products]
       summary: Crear producto
@@ -2320,6 +2516,10 @@ paths:
           $ref: '#/components/responses/Error422'
         '409':
           $ref: '#/components/responses/Conflict'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /products/inactive:
     get:
@@ -2370,11 +2570,7 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
-          description: No tiene permisos para ver productos inactivos
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/Forbidden'
 
   /products/{id}:
     get:
@@ -2395,6 +2591,10 @@ paths:
                 $ref: '#/components/schemas/Product'
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     put:
       tags: [products]
       summary: Actualizar producto
@@ -2421,6 +2621,10 @@ paths:
           $ref: '#/components/responses/NotFound'
         '422':
           $ref: '#/components/responses/Error422'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     delete:
       tags: [products]
       summary: Eliminar producto
@@ -2435,6 +2639,10 @@ paths:
           description: Producto eliminado
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /products/stats:
     get:
@@ -2447,6 +2655,10 @@ paths:
             application/json:
               schema:
                 type: object
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /products/categories:
     get:
@@ -2461,6 +2673,10 @@ paths:
                 type: array
                 items:
                   type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /products/low-stock:
     get:
@@ -2475,6 +2691,10 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Product'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /products/{id}/stock:
     patch:
@@ -2509,6 +2729,10 @@ paths:
           $ref: '#/components/responses/NotFound'
         '422':
           $ref: '#/components/responses/Error422'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   # INVENTARIO
   /inventory:
@@ -2541,6 +2765,10 @@ paths:
                         type: array
                         items:
                           type: object
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /inventory/{id}:
     get:
@@ -2557,6 +2785,10 @@ paths:
           description: Item encontrado
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     put:
       tags: [inventory]
       summary: Actualizar item de inventario
@@ -2571,6 +2803,10 @@ paths:
           description: Item actualizado
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /inventory/stats:
     get:
@@ -2579,6 +2815,10 @@ paths:
       responses:
         '200':
           description: Estadísticas
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /inventory/alerts:
     get:
@@ -2598,6 +2838,10 @@ paths:
       responses:
         '200':
           description: Lista de alertas
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /inventory/low-stock:
     get:
@@ -2606,6 +2850,10 @@ paths:
       responses:
         '200':
           description: Lista de productos
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /inventory/out-of-stock:
     get:
@@ -2614,6 +2862,10 @@ paths:
       responses:
         '200':
           description: Lista de productos
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /inventory/{id}/stock:
     patch:
@@ -2643,6 +2895,10 @@ paths:
           description: Stock actualizado
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /inventory/locations:
     get:
@@ -2657,6 +2913,10 @@ paths:
                 type: array
                 items:
                   type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /inventory/by-location/{location}:
     get:
@@ -2673,6 +2933,10 @@ paths:
       responses:
         '200':
           description: Lista de inventario
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /inventory/adjustment:
     post:
@@ -2704,6 +2968,10 @@ paths:
           description: Ajuste realizado
         '422':
           $ref: '#/components/responses/Error422'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   # RECEPCIONES
   /recepciones:
@@ -2731,6 +2999,10 @@ paths:
       responses:
         '200':
           description: Lista de recepciones
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     post:
       tags: [recepciones]
       summary: Crear recepción
@@ -2745,6 +3017,10 @@ paths:
           description: Recepción creada
         '422':
           $ref: '#/components/responses/Error422'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /recepciones/{id}:
     get:
@@ -2761,6 +3037,10 @@ paths:
           description: Recepción encontrada
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     put:
       tags: [recepciones]
       summary: Actualizar recepción
@@ -2775,6 +3055,10 @@ paths:
           description: Recepción actualizada
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     delete:
       tags: [recepciones]
       summary: Eliminar recepción
@@ -2789,6 +3073,10 @@ paths:
           description: Recepción eliminada
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   # TRANSFERENCIAS
   /transferencias:
@@ -2816,6 +3104,10 @@ paths:
       responses:
         '200':
           description: Lista de transferencias
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     post:
       tags: [transferencias]
       summary: Crear transferencia
@@ -2830,6 +3122,10 @@ paths:
           description: Transferencia creada
         '422':
           $ref: '#/components/responses/Error422'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /transferencias/{id}:
     get:
@@ -2846,6 +3142,10 @@ paths:
           description: Transferencia encontrada
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     put:
       tags: [transferencias]
       summary: Actualizar transferencia
@@ -2860,6 +3160,10 @@ paths:
           description: Transferencia actualizada
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     delete:
       tags: [transferencias]
       summary: Eliminar transferencia
@@ -2874,6 +3178,10 @@ paths:
           description: Transferencia eliminada
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   # PROVEEDORES
   /proveedores:
@@ -2899,6 +3207,10 @@ paths:
       responses:
         '200':
           description: Lista de proveedores
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     post:
       tags: [proveedores]
       summary: Crear proveedor
@@ -2913,6 +3225,10 @@ paths:
           description: Proveedor creado
         '422':
           $ref: '#/components/responses/Error422'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /proveedores/{id}:
     get:
@@ -2929,6 +3245,10 @@ paths:
           description: Proveedor encontrado
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     put:
       tags: [proveedores]
       summary: Actualizar proveedor
@@ -2943,6 +3263,10 @@ paths:
           description: Proveedor actualizado
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     delete:
       tags: [proveedores]
       summary: Eliminar proveedor
@@ -2957,6 +3281,10 @@ paths:
           description: Proveedor eliminado
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   # VENTAS
   /sales:
@@ -2980,6 +3308,10 @@ paths:
       responses:
         '200':
           description: Lista de ventas
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     post:
       tags: [sales]
       summary: Crear venta
@@ -2994,6 +3326,10 @@ paths:
           description: Venta creada
         '422':
           $ref: '#/components/responses/Error422'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /sales/{id}:
     get:
@@ -3010,6 +3346,10 @@ paths:
           description: Venta encontrada
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     put:
       tags: [sales]
       summary: Actualizar venta
@@ -3024,6 +3364,10 @@ paths:
           description: Venta actualizada
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     delete:
       tags: [sales]
       summary: Eliminar venta
@@ -3038,6 +3382,10 @@ paths:
           description: Venta eliminada
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /sales/stats:
     get:
@@ -3046,6 +3394,10 @@ paths:
       responses:
         '200':
           description: Estadísticas
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /sales/monthly:
     get:
@@ -3054,6 +3406,10 @@ paths:
       responses:
         '200':
           description: Datos mensuales
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /sales/{id}/status:
     patch:
@@ -3082,6 +3438,10 @@ paths:
           description: Estado actualizado
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /sales/recent:
     get:
@@ -3096,6 +3456,10 @@ paths:
       responses:
         '200':
           description: Lista de ventas recientes
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /sales/top-customers:
     get:
@@ -3104,6 +3468,10 @@ paths:
       responses:
         '200':
           description: Lista de top clientes
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   # ÓRDENES
   /orders:
@@ -3224,6 +3592,10 @@ paths:
                         type: boolean
                       hasPrev:
                         type: boolean
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     post:
       tags: [orders]
       summary: Crear orden
@@ -3248,6 +3620,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '422':
           $ref: '#/components/responses/Error422'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /orders/{id}:
     get:
@@ -3269,6 +3643,10 @@ paths:
                 $ref: '#/components/schemas/OrderResponse'
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     put:
       tags: [orders]
       summary: Actualizar orden
@@ -3299,6 +3677,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '422':
           $ref: '#/components/responses/Error422'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     delete:
       tags: [orders]
       summary: Eliminar orden (soft delete)
@@ -3324,6 +3704,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /orders/{id}/timeline:
     get:
@@ -3347,6 +3729,10 @@ paths:
                   $ref: '#/components/schemas/OrderTimelineEvent'
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   # CLIENTES
   /customers:
@@ -3393,6 +3779,10 @@ paths:
                         type: array
                         items:
                           $ref: '#/components/schemas/Customer'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     post:
       tags: [customers]
       summary: Crear cliente
@@ -3407,6 +3797,10 @@ paths:
           description: Cliente creado
         '422':
           $ref: '#/components/responses/Error422'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /customers/{id}:
     get:
@@ -3423,6 +3817,10 @@ paths:
           description: Cliente encontrado
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     put:
       tags: [customers]
       summary: Actualizar cliente
@@ -3437,6 +3835,10 @@ paths:
           description: Cliente actualizado
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     delete:
       tags: [customers]
       summary: Eliminar cliente
@@ -3451,6 +3853,10 @@ paths:
           description: Cliente eliminado
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /customers/{id}/visits:
     get:
@@ -3487,6 +3893,10 @@ paths:
           $ref: '#/components/responses/Error422'
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     post:
       tags: [customers]
       summary: Crear visita / nota
@@ -3526,6 +3936,10 @@ paths:
                 $ref: '#/components/schemas/CustomerVisit'
         '422':
           $ref: '#/components/responses/Error422'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /customers/{id}/visits/{visitId}:
     patch:
@@ -3573,6 +3987,10 @@ paths:
           $ref: '#/components/responses/NotFound'
         '422':
           $ref: '#/components/responses/Error422'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /customers/{id}/visits/{visitId}/attachments:
     get:
@@ -3609,6 +4027,10 @@ paths:
                           $ref: '#/components/schemas/CustomerVisitAttachment'
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     post:
       tags: [customers]
       summary: Subir adjunto a una visita
@@ -3652,6 +4074,10 @@ paths:
           $ref: '#/components/responses/Error422'
         '503':
           description: Storage no configurado
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /customers/{id}/visits/{visitId}/attachments/{attachmentId}/download:
     get:
@@ -3685,6 +4111,10 @@ paths:
           description: Redirect a URL presignada R2
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /customers/{id}/visits/{visitId}/attachments/{attachmentId}:
     delete:
@@ -3716,6 +4146,10 @@ paths:
           description: Adjunto eliminado
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /customers/{id}/attachments:
     get:
@@ -3749,6 +4183,10 @@ paths:
                           $ref: '#/components/schemas/CustomerAttachment'
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     post:
       tags: [customers]
       summary: Subir adjunto de cliente
@@ -3790,6 +4228,10 @@ paths:
           $ref: '#/components/responses/Error422'
         '503':
           description: Storage S3/R2 no configurado
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /customers/{id}/attachments/{attachmentId}/download:
     get:
@@ -3817,6 +4259,10 @@ paths:
           $ref: '#/components/responses/NotFound'
         '503':
           description: Storage S3/R2 no configurado
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /customers/{id}/attachments/{attachmentId}:
     delete:
@@ -3844,6 +4290,10 @@ paths:
           $ref: '#/components/responses/NotFound'
         '503':
           description: Storage S3/R2 no configurado
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /customers/{id}/orders:
     get:
@@ -3860,6 +4310,10 @@ paths:
           description: Lista de órdenes
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /customers/{id}/stats:
     get:
@@ -3876,6 +4330,10 @@ paths:
           description: Estadísticas
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   # CONTABILIDAD - CUENTAS
   /accounting/accounts:
@@ -3905,6 +4363,10 @@ paths:
       responses:
         '200':
           description: Lista de cuentas
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     post:
       tags: [accounting]
       summary: Crear cuenta
@@ -3919,6 +4381,10 @@ paths:
           description: Cuenta creada
         '422':
           $ref: '#/components/responses/Error422'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /accounting/accounts/tree:
     get:
@@ -3927,6 +4393,10 @@ paths:
       responses:
         '200':
           description: Árbol jerárquico de cuentas
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /accounting/accounts/{id}:
     get:
@@ -3943,6 +4413,10 @@ paths:
           description: Cuenta encontrada
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     put:
       tags: [accounting]
       summary: Actualizar cuenta
@@ -3957,6 +4431,10 @@ paths:
           description: Cuenta actualizada
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     delete:
       tags: [accounting]
       summary: Eliminar cuenta
@@ -3971,6 +4449,10 @@ paths:
           description: Cuenta eliminada
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /accounting/accounts/{id}/children:
     get:
@@ -3987,6 +4469,10 @@ paths:
           description: Lista de cuentas hijas
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   # CONTABILIDAD - ASIENTOS
   /accounting/entries:
@@ -4018,6 +4504,10 @@ paths:
       responses:
         '200':
           description: Lista de asientos
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     post:
       tags: [accounting]
       summary: Crear asiento
@@ -4032,6 +4522,10 @@ paths:
           description: Asiento creado
         '422':
           $ref: '#/components/responses/Error422'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /accounting/entries/{id}:
     get:
@@ -4048,6 +4542,10 @@ paths:
           description: Asiento encontrado
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     put:
       tags: [accounting]
       summary: Actualizar asiento
@@ -4062,6 +4560,10 @@ paths:
           description: Asiento actualizado
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     delete:
       tags: [accounting]
       summary: Eliminar asiento
@@ -4076,6 +4578,10 @@ paths:
           description: Asiento eliminado
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /accounting/entries/{id}/approve:
     post:
@@ -4094,6 +4600,10 @@ paths:
           $ref: '#/components/responses/NotFound'
         '422':
           $ref: '#/components/responses/Error422'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /accounting/entries/{id}/contabilize:
     post:
@@ -4112,6 +4622,10 @@ paths:
           $ref: '#/components/responses/NotFound'
         '422':
           $ref: '#/components/responses/Error422'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /accounting/entries/{id}/cancel:
     post:
@@ -4130,6 +4644,10 @@ paths:
           $ref: '#/components/responses/NotFound'
         '422':
           $ref: '#/components/responses/Error422'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   # CONTABILIDAD - LIBRO MAYOR
   /accounting/ledger:
@@ -4149,6 +4667,10 @@ paths:
       responses:
         '200':
           description: Libro mayor
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /accounting/ledger/account/{id}:
     get:
@@ -4167,6 +4689,10 @@ paths:
           description: Libro mayor de la cuenta
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /accounting/ledger/export:
     get:
@@ -4187,6 +4713,10 @@ paths:
               schema:
                 type: string
                 format: binary
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   # CONTABILIDAD - LIBRO IVA
   /accounting/tax-books:
@@ -4215,6 +4745,10 @@ paths:
       responses:
         '200':
           description: Libro IVA
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /accounting/tax-books/period/{periodo}:
     get:
@@ -4234,6 +4768,10 @@ paths:
       responses:
         '200':
           description: Libro IVA del período
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /accounting/tax-books/stats:
     get:
@@ -4247,6 +4785,10 @@ paths:
       responses:
         '200':
           description: Estadísticas
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /accounting/tax-books/export:
     get:
@@ -4272,6 +4814,10 @@ paths:
               schema:
                 type: string
                 format: binary
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /accounting/stats/general:
     get:
@@ -4280,6 +4826,10 @@ paths:
       responses:
         '200':
           description: Estadísticas
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /accounting/stats/period/{periodo}:
     get:
@@ -4294,6 +4844,10 @@ paths:
       responses:
         '200':
           description: Estadísticas del período
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   # RRHH — alineado con src/modules/hr/router.ts (GET auth opcional; mutaciones con JWT + RBAC)
   /hr/employees/estadisticas:
@@ -4302,7 +4856,6 @@ paths:
       summary: Estadísticas globales RRHH
       description: |
         Autenticación opcional. Respuesta con envelope `success`, `message`, `timestamp`, `data`.
-      security: []
       responses:
         '200':
           description: OK
@@ -4310,6 +4863,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RrhhEnvelopeEstadisticas'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /hr/employees:
     get:
@@ -4318,7 +4875,6 @@ paths:
       description: |
         Filtros opcionales. Búsqueda de texto libre con query `busqueda` (no `search`).
         Autenticación opcional.
-      security: []
       parameters:
         - $ref: '#/components/parameters/page'
         - $ref: '#/components/parameters/pageSize'
@@ -4355,6 +4911,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RrhhEnvelopeEmpleadosPaginados'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     post:
       tags: [rrhh]
       summary: Crear empleado
@@ -4373,12 +4933,15 @@ paths:
                 $ref: '#/components/schemas/RrhhEnvelopeEmpleado'
         '422':
           $ref: '#/components/responses/Error422'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /hr/employees/{id}:
     get:
       tags: [rrhh]
       summary: Obtener empleado por ID
-      security: []
       parameters:
         - name: id
           in: path
@@ -4395,6 +4958,10 @@ paths:
                 $ref: '#/components/schemas/RrhhEnvelopeEmpleado'
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     put:
       tags: [rrhh]
       summary: Actualizar empleado
@@ -4422,6 +4989,10 @@ paths:
           $ref: '#/components/responses/NotFound'
         '422':
           $ref: '#/components/responses/Error422'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     delete:
       tags: [rrhh]
       summary: Eliminar empleado
@@ -4441,6 +5012,10 @@ paths:
                 $ref: '#/components/schemas/RrhhDeleteEnvelope'
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /hr/employees/{id}/schedules/templates:
     post:
@@ -4468,22 +5043,17 @@ paths:
                 $ref: '#/components/schemas/RrhhEnvelopeScheduleTemplate'
         '401':
           $ref: '#/components/responses/Unauthorized'
-        '403':
-          description: Sin permisos suficientes
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
         '422':
           $ref: '#/components/responses/Error422'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     get:
       tags: [rrhh]
       summary: Listar bloques de plantilla por empleado
-      security: []
       parameters:
         - name: id
           in: path
@@ -4512,6 +5082,10 @@ paths:
           $ref: '#/components/responses/NotFound'
         '422':
           $ref: '#/components/responses/Error422'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /hr/schedules/templates/{templateId}:
     put:
@@ -4539,18 +5113,14 @@ paths:
                 $ref: '#/components/schemas/RrhhEnvelopeScheduleTemplate'
         '401':
           $ref: '#/components/responses/Unauthorized'
-        '403':
-          description: Sin permisos suficientes
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
         '422':
           $ref: '#/components/responses/Error422'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     delete:
       tags: [rrhh]
       summary: Eliminar bloque recurrente de horario
@@ -4570,14 +5140,10 @@ paths:
                 $ref: '#/components/schemas/RrhhDeleteEnvelope'
         '401':
           $ref: '#/components/responses/Unauthorized'
-        '403':
-          description: Sin permisos suficientes
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
         '404':
           $ref: '#/components/responses/NotFound'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /hr/employees/{id}/schedules/exceptions:
     post:
@@ -4605,22 +5171,17 @@ paths:
                 $ref: '#/components/schemas/RrhhEnvelopeScheduleException'
         '401':
           $ref: '#/components/responses/Unauthorized'
-        '403':
-          description: Sin permisos suficientes
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
         '422':
           $ref: '#/components/responses/Error422'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     get:
       tags: [rrhh]
       summary: Listar excepciones por rango de fechas
-      security: []
       parameters:
         - name: id
           in: path
@@ -4651,6 +5212,10 @@ paths:
           $ref: '#/components/responses/NotFound'
         '422':
           $ref: '#/components/responses/Error422'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /hr/schedules/exceptions/{exceptionId}:
     put:
@@ -4678,18 +5243,14 @@ paths:
                 $ref: '#/components/schemas/RrhhEnvelopeScheduleException'
         '401':
           $ref: '#/components/responses/Unauthorized'
-        '403':
-          description: Sin permisos suficientes
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
         '422':
           $ref: '#/components/responses/Error422'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     delete:
       tags: [rrhh]
       summary: Eliminar excepción puntual de horario
@@ -4709,14 +5270,10 @@ paths:
                 $ref: '#/components/schemas/RrhhDeleteEnvelope'
         '401':
           $ref: '#/components/responses/Unauthorized'
-        '403':
-          description: Sin permisos suficientes
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
         '404':
           $ref: '#/components/responses/NotFound'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /hr/employees/{id}/schedules/calendar:
     get:
@@ -4725,7 +5282,6 @@ paths:
       description: |
         Prioridad aplicada por fecha: `exception_off` > `exception_override` > `template`.
         Respuesta optimizada para pintar calendario en frontend con `blocks[]`.
-      security: []
       parameters:
         - name: id
           in: path
@@ -4756,6 +5312,10 @@ paths:
           $ref: '#/components/responses/NotFound'
         '422':
           $ref: '#/components/responses/Error422'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /hr/schedules/calendar:
     get:
@@ -4764,7 +5324,6 @@ paths:
       description: |
         Retorna calendario resuelto de todos los empleados filtrados, agrupado por empleado.
         Devuelve los horarios de varios empleados en una sola solicitud.
-      security: []
       parameters:
         - name: from
           in: query
@@ -4805,6 +5364,10 @@ paths:
                 $ref: '#/components/schemas/RrhhEnvelopeScheduleCalendarBulk'
         '422':
           $ref: '#/components/responses/Error422'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   # RRHH — CONTRATOS (un contrato vigente por empleado; al crear uno nuevo el anterior pasa a respaldo)
   /hr/contracts/{id}/terminar:
@@ -4835,12 +5398,15 @@ paths:
           $ref: '#/components/responses/NotFound'
         '422':
           $ref: '#/components/responses/Error422'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /hr/contracts/empleado/{empleadoId}:
     get:
       tags: [rrhh]
       summary: Contratos de un empleado
-      security: []
       parameters:
         - name: empleadoId
           in: path
@@ -4857,6 +5423,10 @@ paths:
                 $ref: '#/components/schemas/RrhhEnvelopeContratosLista'
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /hr/contracts:
     get:
@@ -4865,7 +5435,6 @@ paths:
       description: |
         Búsqueda opcional con `search` o alias `q` (mismo efecto).
         Autenticación opcional.
-      security: []
       parameters:
         - $ref: '#/components/parameters/page'
         - $ref: '#/components/parameters/pageSize'
@@ -4898,6 +5467,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RrhhEnvelopeContratosPaginados'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     post:
       tags: [rrhh]
       summary: Crear contrato
@@ -4916,12 +5489,15 @@ paths:
                 $ref: '#/components/schemas/RrhhEnvelopeContrato'
         '422':
           $ref: '#/components/responses/Error422'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /hr/contracts/{id}:
     get:
       tags: [rrhh]
       summary: Obtener contrato por ID
-      security: []
       parameters:
         - name: id
           in: path
@@ -4938,6 +5514,10 @@ paths:
                 $ref: '#/components/schemas/RrhhEnvelopeContrato'
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     put:
       tags: [rrhh]
       summary: Actualizar contrato
@@ -4965,13 +5545,16 @@ paths:
           $ref: '#/components/responses/NotFound'
         '422':
           $ref: '#/components/responses/Error422'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   # RRHH — NÓMINA (no existe POST /hr/payroll; la generación es POST /hr/payroll/generar)
   /hr/payroll/resumen/{periodo}:
     get:
       tags: [rrhh]
       summary: Resumen agregado de nómina por período
-      security: []
       parameters:
         - name: periodo
           in: path
@@ -4986,12 +5569,15 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RrhhEnvelopeResumenNomina'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /hr/payroll/periodo/{periodo}:
     get:
       tags: [rrhh]
       summary: Nóminas de un período (lista)
-      security: []
       parameters:
         - name: periodo
           in: path
@@ -5006,6 +5592,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RrhhEnvelopeNominaLista'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /hr/payroll/generar:
     post:
@@ -5026,6 +5616,10 @@ paths:
                 $ref: '#/components/schemas/RrhhEnvelopeNominaLista'
         '422':
           $ref: '#/components/responses/Error422'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /hr/payroll/calcular:
     post:
@@ -5046,6 +5640,10 @@ paths:
                 $ref: '#/components/schemas/RrhhEnvelopeCalculoNomina'
         '422':
           $ref: '#/components/responses/Error422'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /hr/payroll/procesar:
     put:
@@ -5066,6 +5664,10 @@ paths:
                 $ref: '#/components/schemas/RrhhEnvelopeNomina'
         '422':
           $ref: '#/components/responses/Error422'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /hr/payroll/exportar:
     post:
@@ -5092,12 +5694,15 @@ paths:
               schema:
                 type: string
                 format: binary
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /hr/payroll:
     get:
       tags: [rrhh]
       summary: Listar nóminas (paginado)
-      security: []
       parameters:
         - $ref: '#/components/parameters/page'
         - $ref: '#/components/parameters/pageSize'
@@ -5122,12 +5727,15 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RrhhEnvelopeNominaPaginados'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /hr/payroll/{id}:
     get:
       tags: [rrhh]
       summary: Obtener nómina por ID
-      security: []
       parameters:
         - name: id
           in: path
@@ -5144,13 +5752,16 @@ paths:
                 $ref: '#/components/schemas/RrhhEnvelopeNomina'
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   # RRHH — IMPOSICIONES (no existe POST /hr/contributions; la generación es POST /hr/contributions/generar)
   /hr/contributions/periodo/{periodo}:
     get:
       tags: [rrhh]
       summary: Imposiciones de un período
-      security: []
       parameters:
         - name: periodo
           in: path
@@ -5165,6 +5776,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RrhhEnvelopeImposicionesLista'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /hr/contributions/generar:
     post:
@@ -5185,6 +5800,10 @@ paths:
                 $ref: '#/components/schemas/RrhhEnvelopeImposicionesLista'
         '422':
           $ref: '#/components/responses/Error422'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /hr/contributions/exportar:
     post:
@@ -5211,12 +5830,15 @@ paths:
               schema:
                 type: string
                 format: binary
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /hr/contributions:
     get:
       tags: [rrhh]
       summary: Listar resúmenes de imposiciones (paginado)
-      security: []
       parameters:
         - $ref: '#/components/parameters/page'
         - $ref: '#/components/parameters/pageSize'
@@ -5241,12 +5863,15 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RrhhEnvelopeImposicionesPaginados'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /hr/contributions/{id}:
     get:
       tags: [rrhh]
       summary: Obtener resumen de imposiciones por ID
-      security: []
       parameters:
         - name: id
           in: path
@@ -5263,13 +5888,16 @@ paths:
                 $ref: '#/components/schemas/RrhhEnvelopeImposicion'
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   # RRHH — CARGOS
   /hr/positions:
     get:
       tags: [rrhh]
       summary: Listar cargos
-      security: []
       responses:
         '200':
           description: OK
@@ -5277,12 +5905,15 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RrhhEnvelopeCargosLista'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /hr/positions/{id}:
     get:
       tags: [rrhh]
       summary: Obtener cargo por ID
-      security: []
       parameters:
         - name: id
           in: path
@@ -5299,13 +5930,16 @@ paths:
                 $ref: '#/components/schemas/RrhhEnvelopeCargo'
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   # RRHH — PARÁMETROS DE CÁLCULO (AFP, salud, etc.)
   /hr/parametros/calculo:
     get:
       tags: [rrhh]
       summary: Obtener parámetros de cálculo
-      security: []
       responses:
         '200':
           description: OK
@@ -5313,6 +5947,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RrhhEnvelopeParametros'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     put:
       tags: [rrhh]
       summary: Actualizar parámetros de cálculo
@@ -5331,6 +5969,10 @@ paths:
                 $ref: '#/components/schemas/RrhhEnvelopeParametros'
         '422':
           $ref: '#/components/responses/Error422'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   # ADMIN - USUARIOS
   /admin/users:
@@ -5360,6 +6002,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AdminPaginatedUsuarios'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     post:
       tags: [admin]
       summary: Crear usuario
@@ -5378,6 +6024,10 @@ paths:
                 $ref: '#/components/schemas/AdminUsuario'
         '422':
           $ref: '#/components/responses/Error422'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /admin/users/{id}:
     get:
@@ -5398,6 +6048,10 @@ paths:
                 $ref: '#/components/schemas/AdminUsuario'
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     put:
       tags: [admin]
       summary: Actualizar usuario
@@ -5416,6 +6070,10 @@ paths:
                 $ref: '#/components/schemas/AdminUsuario'
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     delete:
       tags: [admin]
       summary: Eliminar usuario
@@ -5430,6 +6088,10 @@ paths:
           description: Usuario eliminado
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /admin/users/{id}/password:
     put:
@@ -5466,6 +6128,10 @@ paths:
           $ref: '#/components/responses/Error422'
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   # ADMIN - ROLES
   /admin/roles:
@@ -5488,6 +6154,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AdminPaginatedRoles'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     post:
       tags: [admin]
       summary: Crear rol
@@ -5502,6 +6172,10 @@ paths:
           description: Rol creado
         '422':
           $ref: '#/components/responses/Error422'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /admin/roles/{id}:
     get:
@@ -5522,6 +6196,10 @@ paths:
                 $ref: '#/components/schemas/AdminRol'
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     put:
       tags: [admin]
       summary: Actualizar rol
@@ -5540,6 +6218,10 @@ paths:
                 $ref: '#/components/schemas/AdminRol'
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     delete:
       tags: [admin]
       summary: Eliminar rol
@@ -5554,6 +6236,10 @@ paths:
           description: Rol eliminado
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /admin/roles/{id}/permissions:
     put:
@@ -5587,6 +6273,10 @@ paths:
                 $ref: '#/components/schemas/AdminRol'
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   # ADMIN - PERMISOS
   /admin/permissions:
@@ -5608,6 +6298,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AdminPermisosCatalogoOLista'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   # ADMIN - SUCURSALES
   /admin/branches:
@@ -5630,6 +6324,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AdminPaginatedSucursales'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     post:
       tags: [admin]
       summary: Crear sucursal
@@ -5644,6 +6342,10 @@ paths:
           description: Sucursal creada
         '422':
           $ref: '#/components/responses/Error422'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /admin/branches/{id}:
     get:
@@ -5664,6 +6366,10 @@ paths:
                 $ref: '#/components/schemas/AdminSucursal'
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     put:
       tags: [admin]
       summary: Actualizar sucursal
@@ -5682,6 +6388,10 @@ paths:
                 $ref: '#/components/schemas/AdminSucursal'
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     delete:
       tags: [admin]
       summary: Eliminar sucursal
@@ -5696,6 +6406,10 @@ paths:
           description: Sucursal eliminada
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   # ADMIN - CONFIGURACIONES
   /admin/settings:
@@ -5722,6 +6436,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AdminPaginatedSettings'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /admin/settings/{id}:
     get:
@@ -5742,6 +6460,10 @@ paths:
                 $ref: '#/components/schemas/AdminConfiguracionSistema'
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     put:
       tags: [admin]
       summary: Actualizar configuración
@@ -5760,6 +6482,10 @@ paths:
                 $ref: '#/components/schemas/AdminConfiguracionSistema'
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /admin/stats:
     get:
@@ -5772,6 +6498,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/EstadisticasAdmin'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   # FORECAST
   /forecast/calculate:
@@ -5789,6 +6519,10 @@ paths:
           description: Resultado del forecast
         '422':
           $ref: '#/components/responses/Error422'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /forecast/kpis:
     get:
@@ -5797,6 +6531,10 @@ paths:
       responses:
         '200':
           description: KPIs
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /forecast/productos-top:
     post:
@@ -5811,6 +6549,10 @@ paths:
       responses:
         '200':
           description: Lista de productos top
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /forecast/sets-top:
     post:
@@ -5825,6 +6567,10 @@ paths:
       responses:
         '200':
           description: Lista de sets top
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /forecast/grafico:
     post:
@@ -5839,6 +6585,10 @@ paths:
       responses:
         '200':
           description: Datos de gráfico
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /forecast/comparar-metodos:
     post:
@@ -5853,6 +6603,10 @@ paths:
       responses:
         '200':
           description: Comparación de métodos
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /forecast/alertas:
     get:
@@ -5861,6 +6615,10 @@ paths:
       responses:
         '200':
           description: Lista de alertas
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /forecast/estado:
     get:
@@ -5869,6 +6627,10 @@ paths:
       responses:
         '200':
           description: Estado
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /forecast/configuracion:
     get:
@@ -5877,6 +6639,10 @@ paths:
       responses:
         '200':
           description: Lista de configuraciones
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     post:
       tags: [forecast]
       summary: Guardar configuración
@@ -5889,6 +6655,10 @@ paths:
       responses:
         '201':
           description: Configuración guardada
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /forecast/configuracion/{id}:
     put:
@@ -5903,6 +6673,10 @@ paths:
       responses:
         '200':
           description: Configuración actualizada
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     delete:
       tags: [forecast]
       summary: Eliminar configuración
@@ -5915,6 +6689,10 @@ paths:
       responses:
         '200':
           description: Configuración eliminada
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /forecast/historial:
     get:
@@ -5926,6 +6704,10 @@ paths:
       responses:
         '200':
           description: Historial
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /forecast/exportar:
     post:
@@ -5940,6 +6722,10 @@ paths:
       responses:
         '200':
           description: Archivo exportado
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /forecast/datos-historicos:
     get:
@@ -5954,6 +6740,10 @@ paths:
       responses:
         '200':
           description: Datos históricos
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /forecast/validar-configuracion:
     post:
@@ -5968,6 +6758,10 @@ paths:
       responses:
         '200':
           description: Resultado de validación
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /forecast/recomendaciones:
     get:
@@ -5976,6 +6770,10 @@ paths:
       responses:
         '200':
           description: Lista de recomendaciones
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /forecast/metricas:
     post:
@@ -5990,6 +6788,10 @@ paths:
       responses:
         '200':
           description: Métricas calculadas
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   # REPORTES
   /reports:
@@ -6006,6 +6808,12 @@ paths:
       responses:
         '200':
           description: Lista de reportes
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /reports/generate:
     post:
       tags: [reports]
       summary: Generar reporte
@@ -6018,6 +6826,10 @@ paths:
       responses:
         '201':
           description: Reporte generado
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /reports/{id}:
     get:
@@ -6034,6 +6846,10 @@ paths:
           description: Reporte encontrado
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     delete:
       tags: [reports]
       summary: Eliminar reporte
@@ -6046,6 +6862,10 @@ paths:
       responses:
         '200':
           description: Reporte eliminado
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /reports/types:
     get:
@@ -6054,6 +6874,10 @@ paths:
       responses:
         '200':
           description: Lista de tipos
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /reports/stats:
     get:
@@ -6062,6 +6886,10 @@ paths:
       responses:
         '200':
           description: Estadísticas
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /reports/recent:
     get:
@@ -6076,6 +6904,10 @@ paths:
       responses:
         '200':
           description: Lista de reportes recientes
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /reports/export/{id}:
     get:
@@ -6095,6 +6927,10 @@ paths:
       responses:
         '200':
           description: Archivo exportado
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   # DASHBOARD
   /dashboard/stats:
@@ -6111,7 +6947,7 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
-          description: Sin permiso dashboard.read
+          $ref: '#/components/responses/Forbidden'
 
   /dashboard/charts:
     get:
@@ -6134,7 +6970,7 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
-          description: Sin permiso dashboard.read
+          $ref: '#/components/responses/Forbidden'
 
   /charts/monthly-sales:
     get:
@@ -6152,7 +6988,7 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
-          description: Sin permiso charts.read
+          $ref: '#/components/responses/Forbidden'
 
   /charts/categories:
     get:
@@ -6170,7 +7006,7 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
-          description: Sin permiso charts.read
+          $ref: '#/components/responses/Forbidden'
 
   /charts/stock:
     get:
@@ -6188,7 +7024,7 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
-          description: Sin permiso charts.read
+          $ref: '#/components/responses/Forbidden'
 
   /charts/trends:
     get:
@@ -6206,4 +7042,4 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
-          description: Sin permiso charts.read
+          $ref: '#/components/responses/Forbidden'

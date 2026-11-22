@@ -11,7 +11,7 @@ forecastRouter.post('/calculate', authJWT, rbacGuard, async (c) => {
   return ok(c, forecastService.calculate(body));
 });
 
-forecastRouter.get('/kpis', authJWT, async (c) => {
+forecastRouter.get('/kpis', authJWT, rbacGuard, async (c) => {
   return ok(c, forecastService.kpis());
 });
 
@@ -35,15 +35,15 @@ forecastRouter.post('/comparar-metodos', authJWT, rbacGuard, async (c) => {
   return ok(c, forecastService.compararMetodos(body));
 });
 
-forecastRouter.get('/alertas', authJWT, async (c) => {
+forecastRouter.get('/alertas', authJWT, rbacGuard, async (c) => {
   return ok(c, forecastService.alertas());
 });
 
-forecastRouter.get('/estado', authJWT, async (c) => {
+forecastRouter.get('/estado', authJWT, rbacGuard, async (c) => {
   return ok(c, forecastService.estado());
 });
 
-forecastRouter.get('/configuracion', authJWT, async (c) => {
+forecastRouter.get('/configuracion', authJWT, rbacGuard, async (c) => {
   return ok(c, forecastService.configuracionList());
 });
 
@@ -52,7 +52,7 @@ forecastRouter.post('/configuracion', authJWT, rbacGuard, async (c) => {
   return ok(c, forecastService.configuracionCreate(body), 201);
 });
 
-forecastRouter.get('/configuracion/:id', authJWT, async (c) => {
+forecastRouter.get('/configuracion/:id', authJWT, rbacGuard, async (c) => {
   return ok(c, forecastService.configuracionGet(c.req.param('id')));
 });
 
@@ -65,7 +65,7 @@ forecastRouter.delete('/configuracion/:id', authJWT, rbacGuard, async (c) => {
   return ok(c, forecastService.configuracionDelete(c.req.param('id')));
 });
 
-forecastRouter.get('/historial', authJWT, async (c) => {
+forecastRouter.get('/historial', authJWT, rbacGuard, async (c) => {
   const q: Record<string, string | undefined> = {
     page: c.req.query('page'),
     limit: c.req.query('limit'),
@@ -85,7 +85,7 @@ forecastRouter.post('/exportar', authJWT, rbacGuard, async (c) => {
   });
 });
 
-forecastRouter.get('/datos-historicos', authJWT, async (c) => {
+forecastRouter.get('/datos-historicos', authJWT, rbacGuard, async (c) => {
   const q: Record<string, string | undefined> = {
     desde: c.req.query('desde'),
     hasta: c.req.query('hasta'),
@@ -98,7 +98,7 @@ forecastRouter.post('/validar-configuracion', authJWT, rbacGuard, async (c) => {
   return ok(c, forecastService.validarConfiguracion(body));
 });
 
-forecastRouter.get('/recomendaciones', authJWT, async (c) => {
+forecastRouter.get('/recomendaciones', authJWT, rbacGuard, async (c) => {
   return ok(c, forecastService.recomendaciones());
 });
 

@@ -65,6 +65,7 @@ export const customersRouter = new Hono();
 customersRouter.get(
   '/',
   authJWT,
+  rbacGuard,
   validateQuery(listCustomersQueryDto),
   async (c) => {
     const query = (c as any).get('validatedQuery') as z.infer<typeof listCustomersQueryDto>;
@@ -114,6 +115,7 @@ customersRouter.post(
 customersRouter.get(
   '/:id/visits',
   authJWT,
+  rbacGuard,
   validateParams(customerIdParamDto),
   validateQuery(listCustomerVisitsQueryDto),
   async (c) => {
@@ -169,6 +171,7 @@ customersRouter.patch(
 customersRouter.get(
   '/:id/visits/:visitId/attachments',
   authJWT,
+  rbacGuard,
   validateParams(customerVisitIdParamDto),
   validateQuery(listCustomerVisitAttachmentsQueryDto),
   async (c) => {
@@ -282,6 +285,7 @@ customersRouter.delete(
 customersRouter.get(
   '/:id/attachments',
   authJWT,
+  rbacGuard,
   validateParams(customerIdParamDto),
   validateQuery(listCustomerAttachmentsQueryDto),
   async (c) => {
@@ -385,6 +389,7 @@ customersRouter.delete(
 customersRouter.get(
   '/:id',
   authJWT,
+  rbacGuard,
   validateParams(customerIdParamDto),
   async (c) => {
     const params = (c as any).get('validatedParams') as { id: string };
@@ -425,6 +430,7 @@ customersRouter.delete(
 customersRouter.get(
   '/:id/orders',
   authJWT,
+  rbacGuard,
   validateParams(customerIdParamDto),
   async (c) => {
     const { id } = (c as any).get('validatedParams') as { id: string };
@@ -437,6 +443,7 @@ customersRouter.get(
 customersRouter.get(
   '/:id/stats',
   authJWT,
+  rbacGuard,
   validateParams(customerIdParamDto),
   async (c) => {
     const { id } = (c as any).get('validatedParams') as { id: string };

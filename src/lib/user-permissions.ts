@@ -2,11 +2,15 @@ import { db } from './db.js';
 
 /**
  * Permisos UI canónicos (`permission.nombre`) efectivos para el usuario:
- * unión de todos los roles activos vía `role_permissions`.
+ * unión de todos los roles activos vía `role_permissions`; Admin tiene el catálogo completo.
  */
 export async function getEffectivePermissionNamesForUserId(userId: string): Promise<string[]> {
   const userRoles = await db.userRole.findMany({
-    where: { userId },
+    where: {
+      userId,
+      user: { activo: true, deletedAt: null },
+      role: { activo: true, deletedAt: null },
+    },
     include: {
       role: {
         include: {
@@ -18,21 +22,8 @@ export async function getEffectivePermissionNamesForUserId(userId: string): Prom
     },
   });
 
-  const set = new Set<string>();
-  for (const ur of userRoles) {
-    const r = ur.role;
-    if (r.deletedAt || !r.activo) continue;
-    for (const rp of r.rolePermissions) {
-      set.add(rp.permission.nombre);
-    }
-  }
-
-  return [...set].sort((a, b) => a.localeCompare(b));
-}
-
-export async function userHasAnyPermission(userId: string, required: string[]): Promise<boolean> {
-  if (required.length === 0) return true;
-  const effective = await getEffectivePermissionNamesForUserId(userId);
-  const set = new Set(effective);
-  return required.some((p) => set.has(p));
+  const names = userRoles.some(({ role }) => role.nombre === 'Admin')
+    ? (await db.permission.findMany({ select: { nombre: true } })).map(({ nombre }) => nombre)
+    : userRoles.flatMap(({ role }) => role.rolePermissions.map(({ permission }) => permission.nombre));
+  return [...new Set(names)].sort((a, b) => a.localeCompare(b));
 }

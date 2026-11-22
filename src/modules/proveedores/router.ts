@@ -18,6 +18,7 @@ export const proveedoresRouter = new Hono();
 proveedoresRouter.get(
   '/',
   authJWT,
+  rbacGuard,
   validateQuery(listSuppliersQueryDto),
   async (c) => {
     const query = (c as any).get('validatedQuery') as z.infer<typeof listSuppliersQueryDto>;
@@ -50,6 +51,7 @@ proveedoresRouter.post(
 proveedoresRouter.get(
   '/:id',
   authJWT,
+  rbacGuard,
   validateParams(supplierIdParamDto),
   async (c) => {
     const { id } = (c as any).get('validatedParams') as { id: string };

@@ -19,6 +19,7 @@ export const rolesRouter = new Hono();
 rolesRouter.get(
   '/',
   authJWT,
+  rbacGuard,
   validateQuery(listRolesQueryDto),
   async (c) => {
     const query = (c as any).get('validatedQuery') as z.infer<typeof listRolesQueryDto>;
@@ -70,6 +71,7 @@ rolesRouter.put(
 rolesRouter.get(
   '/:id',
   authJWT,
+  rbacGuard,
   validateParams(roleIdParamDto),
   async (c) => {
     const { id } = (c as any).get('validatedParams') as { id: string };

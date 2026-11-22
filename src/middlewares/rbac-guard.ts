@@ -1,37 +1,29 @@
 import { Context, Next } from 'hono';
 import { AppError, ErrorCodes } from '../lib/errors.js';
-import { can, mapPathToResource } from '../lib/rbac.js';
 import { JWTPayload } from '../lib/auth.js';
+import { getEffectivePermissionNamesForUserId } from '../lib/user-permissions.js';
+import { routePermissions } from './route-permissions.js';
 
 export const rbacGuard = async (c: Context, next: Next) => {
   const user = c.get('user') as JWTPayload | undefined;
-
   if (!user) {
     throw new AppError(ErrorCodes.UNAUTHORIZED, 'Usuario no autenticado', 401);
   }
 
-  const path = c.req.path;
-  const method = c.req.method;
-
-  const resourceAction = mapPathToResource(path, method);
-
-  if (!resourceAction) {
-    // Si no se puede mapear, permitir (puede ser endpoint público)
-    await next();
-    return;
+  const permission = routePermissions.get(`${c.req.method} ${c.req.routePath}`);
+  if (!permission) {
+    throw new AppError(ErrorCodes.FORBIDDEN, 'No tiene permisos para acceder a esta ruta', 403);
   }
 
-  const { resource, action } = resourceAction;
+  let permissions = c.get('effectivePermissions') as Set<string> | undefined;
+  if (!permissions) {
+    permissions = new Set(await getEffectivePermissionNamesForUserId(user.userId));
+    c.set('effectivePermissions', permissions);
+  }
 
-  // Verificar permisos
-  if (!can(user.role, resource, action)) {
-    throw new AppError(
-      ErrorCodes.FORBIDDEN,
-      `No tiene permisos para ${action} en ${resource}`,
-      403
-    );
+  if (!permissions.has(permission)) {
+    throw new AppError(ErrorCodes.FORBIDDEN, `Se requiere el permiso ${permission}`, 403);
   }
 
   await next();
 };
-

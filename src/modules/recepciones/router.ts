@@ -19,6 +19,7 @@ export const recepcionesRouter = new Hono();
 recepcionesRouter.get(
   '/',
   authJWT,
+  rbacGuard,
   validateQuery(listRecepcionesQueryDto),
   async (c) => {
     const query = (c as any).get('validatedQuery') as z.infer<typeof listRecepcionesQueryDto>;
@@ -61,6 +62,7 @@ recepcionesRouter.post(
 recepcionesRouter.get(
   '/:id',
   authJWT,
+  rbacGuard,
   validateParams(receptionIdParamDto),
   async (c) => {
     const { id } = (c as any).get('validatedParams') as { id: string };

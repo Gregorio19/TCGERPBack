@@ -18,6 +18,7 @@ export const branchesRouter = new Hono();
 branchesRouter.get(
   '/',
   authJWT,
+  rbacGuard,
   validateQuery(listBranchesQueryDto),
   async (c) => {
     const query = (c as any).get('validatedQuery') as z.infer<typeof listBranchesQueryDto>;
@@ -55,6 +56,7 @@ branchesRouter.post(
 branchesRouter.get(
   '/:id',
   authJWT,
+  rbacGuard,
   validateParams(branchIdParamDto),
   async (c) => {
     const { id } = (c as any).get('validatedParams') as { id: string };

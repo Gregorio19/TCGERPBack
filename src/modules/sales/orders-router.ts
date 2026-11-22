@@ -20,6 +20,7 @@ export const ordersRouter = new Hono();
 ordersRouter.get(
   '/',
   authJWT,
+  rbacGuard,
   validateQuery(listOrdersQueryDto),
   async (c) => {
     const query = (c as any).get('validatedQuery') as z.infer<typeof listOrdersQueryDto>;
@@ -71,6 +72,7 @@ ordersRouter.post(
 ordersRouter.get(
   '/:id',
   authJWT,
+  rbacGuard,
   validateParams(orderIdParamDto),
   async (c) => {
     const params = (c as any).get('validatedParams') as { id: string };
@@ -111,6 +113,7 @@ ordersRouter.delete(
 ordersRouter.get(
   '/:id/timeline',
   authJWT,
+  rbacGuard,
   validateParams(orderIdParamDto),
   async (c) => {
     const { id } = (c as any).get('validatedParams') as { id: string };

@@ -18,6 +18,7 @@ export const transferenciasRouter = new Hono();
 transferenciasRouter.get(
   '/',
   authJWT,
+  rbacGuard,
   validateQuery(listTransferenciasQueryDto),
   async (c) => {
     const query = (c as any).get('validatedQuery') as z.infer<typeof listTransferenciasQueryDto>;
@@ -56,6 +57,7 @@ transferenciasRouter.post(
 transferenciasRouter.get(
   '/:id',
   authJWT,
+  rbacGuard,
   validateParams(transferIdParamDto),
   async (c) => {
     const { id } = (c as any).get('validatedParams') as { id: string };

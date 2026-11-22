@@ -25,7 +25,7 @@ export const error = (c: Context, err: AppError | Error) => {
       timestamp: new Date().toISOString(),
     };
 
-    return c.json(response, err.statusCode as 200 | 400 | 401 | 403 | 404 | 409 | 422 | 500);
+    return c.json(response, err.statusCode as 200 | 400 | 401 | 403 | 404 | 409 | 422 | 429 | 500);
   }
 
   // Error no esperado

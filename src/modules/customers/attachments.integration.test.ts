@@ -1,6 +1,6 @@
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import app from '../../app.js';
+import { requestAsAdmin } from '../../test-utils/auth.js';
 import {
   setAttachmentStorageForTests,
 } from '../../lib/storage/index.js';
@@ -16,17 +16,6 @@ const PNG_1X1 = Buffer.from(
   'base64'
 );
 
-async function loginAdmin(): Promise<string> {
-  const loginRes = await app.request('http://localhost/api/auth/login', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username: 'admin', password: 'password123' }),
-  });
-  assert.equal(loginRes.status, 200, 'login seed admin/password123');
-  const { token } = (await loginRes.json()) as { token: string };
-  return token;
-}
-
 describe('Clientes — adjuntos (integración)', () => {
   before(() => {
     setAttachmentStorageForTests(createMemoryAttachmentStorage());
@@ -37,41 +26,35 @@ describe('Clientes — adjuntos (integración)', () => {
   });
 
   it('rechaza tipo de archivo no permitido', async () => {
-    const token = await loginAdmin();
     const form = new FormData();
     form.append('file', new Blob(['hola mundo'], { type: 'text/plain' }), 'nota.txt');
 
-    const res = await app.request(`http://localhost/api/customers/${CUSTOMER_ID}/attachments`, {
+    const res = await requestAsAdmin(`/api/customers/${CUSTOMER_ID}/attachments`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
       body: form,
     });
     assert.equal(res.status, 422);
   });
 
   it('rechaza archivo mayor a 10 MB', async () => {
-    const token = await loginAdmin();
     const oversized = Buffer.alloc(env.ATTACHMENTS_MAX_BYTES + 1, 0xff);
     const form = new FormData();
     form.append('file', new Blob([oversized], { type: 'application/pdf' }), 'grande.pdf');
 
-    const res = await app.request(`http://localhost/api/customers/${CUSTOMER_ID}/attachments`, {
+    const res = await requestAsAdmin(`/api/customers/${CUSTOMER_ID}/attachments`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
       body: form,
     });
     assert.equal(res.status, 422);
   });
 
   it('sube imagen, lista, descarga y elimina', async () => {
-    const token = await loginAdmin();
     const form = new FormData();
     form.append('file', new Blob([PNG_1X1], { type: 'image/png' }), 'foto.png');
     form.append('descripcion', 'Comprobante de prueba');
 
-    const postRes = await app.request(`http://localhost/api/customers/${CUSTOMER_ID}/attachments`, {
+    const postRes = await requestAsAdmin(`/api/customers/${CUSTOMER_ID}/attachments`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
       body: form,
     });
     const postText = await postRes.text();
@@ -92,8 +75,8 @@ describe('Clientes — adjuntos (integración)', () => {
     assert.equal(created.descripcion, 'Comprobante de prueba');
     assert.ok(created.downloadPath.includes(created.id));
 
-    const listRes = await app.request(
-      `http://localhost/api/customers/${CUSTOMER_ID}/attachments?page=1&limit=10`
+    const listRes = await requestAsAdmin(
+      `/api/customers/${CUSTOMER_ID}/attachments?page=1&limit=10`
     );
     assert.equal(listRes.status, 200);
     const listJson = (await listRes.json()) as {
@@ -102,10 +85,9 @@ describe('Clientes — adjuntos (integración)', () => {
     };
     assert.ok(listJson.data.some((a) => a.id === created.id));
 
-    const downloadRes = await app.request(
-      `http://localhost/api/customers/${CUSTOMER_ID}/attachments/${created.id}/download`,
+    const downloadRes = await requestAsAdmin(
+      `/api/customers/${CUSTOMER_ID}/attachments/${created.id}/download`,
       {
-        headers: { Authorization: `Bearer ${token}` },
         redirect: 'manual',
       }
     );
@@ -113,24 +95,20 @@ describe('Clientes — adjuntos (integración)', () => {
     const location = downloadRes.headers.get('Location');
     assert.ok(location?.startsWith('https://memory.test/'));
 
-    const downloadJsonRes = await app.request(
-      `http://localhost/api/customers/${CUSTOMER_ID}/attachments/${created.id}/download`,
+    const downloadJsonRes = await requestAsAdmin(
+      `/api/customers/${CUSTOMER_ID}/attachments/${created.id}/download`,
       {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: 'application/json',
-        },
+        headers: { Accept: 'application/json' },
       }
     );
     assert.equal(downloadJsonRes.status, 200);
     const downloadJson = (await downloadJsonRes.json()) as { url: string };
     assert.ok(downloadJson.url.startsWith('https://memory.test/'));
 
-    const deleteRes = await app.request(
-      `http://localhost/api/customers/${CUSTOMER_ID}/attachments/${created.id}`,
+    const deleteRes = await requestAsAdmin(
+      `/api/customers/${CUSTOMER_ID}/attachments/${created.id}`,
       {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
       }
     );
     assert.equal(deleteRes.status, 204);

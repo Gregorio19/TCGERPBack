@@ -18,6 +18,7 @@ export const settingsRouter = new Hono();
 settingsRouter.get(
   '/',
   authJWT,
+  rbacGuard,
   validateQuery(listSettingsQueryDto),
   async (c) => {
     const query = (c as any).get('validatedQuery') as z.infer<typeof listSettingsQueryDto>;
@@ -57,6 +58,7 @@ settingsRouter.post(
 settingsRouter.get(
   '/:id',
   authJWT,
+  rbacGuard,
   validateParams(settingIdParamDto),
   async (c) => {
     const { id } = (c as any).get('validatedParams') as { id: string };

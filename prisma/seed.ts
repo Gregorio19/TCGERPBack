@@ -25,44 +25,38 @@ function loadPermissionsCanonical(): CanonicalCatalog {
   return raw;
 }
 
-/**
- * Catálogo alineado con el front (RouteGuard). Sustituye filas previas (p. ej. rbac.json).
- * Orden: vacía pivotes y permisos, recrea catálogo, asigna todo al rol Admin.
- */
 async function seedPermissionsCatalog() {
-  const catalog = loadPermissionsCanonical();
+  const { permissions } = loadPermissionsCanonical();
 
-  console.log('🔐 Permisos canónicos (front): limpiando role_permissions y permissions...');
-  await prisma.rolePermission.deleteMany({});
-  await prisma.permission.deleteMany({});
+  console.log('🔐 Reconciliando permisos canónicos...');
+  await prisma.$transaction(async (tx) => {
+    const permissionIds = [];
+    for (const permission of permissions) {
+      const { nombre, ...metadata } = permission;
+      const { id } = await tx.permission.upsert({
+        where: { nombre },
+        update: metadata,
+        create: permission,
+        select: { id: true },
+      });
+      permissionIds.push(id);
+    }
 
-  await prisma.permission.createMany({
-    data: catalog.permissions.map((p) => ({
-      nombre: p.nombre,
-      recurso: p.recurso,
-      accion: p.accion,
-      categoria: p.categoria,
-      descripcion: p.descripcion,
-    })),
+    // La FK elimina en cascada los enlaces de los permisos fuera del catálogo.
+    await tx.permission.deleteMany({
+      where: { nombre: { notIn: permissions.map(({ nombre }) => nombre) } },
+    });
+
+    const adminRole = await tx.role.findFirst({
+      where: { nombre: 'Admin', deletedAt: null },
+    });
+    if (adminRole) {
+      await tx.rolePermission.createMany({
+        data: permissionIds.map((permissionId) => ({ roleId: adminRole.id, permissionId })),
+        skipDuplicates: true,
+      });
+    }
   });
-
-  const adminRole = await prisma.role.findFirst({
-    where: { nombre: 'Admin', deletedAt: null },
-  });
-
-  if (!adminRole) {
-    console.log('   → Sin rol Admin: permisos creados sin enlaces.');
-    return;
-  }
-
-  const allPerms = await prisma.permission.findMany({ select: { id: true } });
-  await prisma.rolePermission.createMany({
-    data: allPerms.map((p) => ({ roleId: adminRole.id, permissionId: p.id })),
-  });
-
-  console.log(
-    `   → ${catalog.permissions.length} permisos; todos asignados al rol Admin (${allPerms.length} enlaces).`
-  );
 }
 
 async function main() {
@@ -163,7 +157,7 @@ async function main() {
   }
 
   // 4. Suppliers (antes de recepciones)
-  console.log('🏢 Creando proveedores...');
+  if (!isProd) console.log('🏢 Creando proveedores...');
   for (const supplier of seeds.proveedores) {
     await prisma.supplier.upsert({
       where: { id: supplier.id },
@@ -181,7 +175,7 @@ async function main() {
   }
 
   // 5. Products
-  console.log('🃏 Creando productos...');
+  if (!isProd) console.log('🃏 Creando productos...');
   for (const product of seeds.products) {
     await prisma.product.upsert({
       where: { id: product.id },
@@ -211,7 +205,7 @@ async function main() {
   }
 
   // 6. Customers (antes de orders)
-  console.log('👥 Creando clientes...');
+  if (!isProd) console.log('👥 Creando clientes...');
   for (const customer of seeds.customers) {
     await prisma.customer.upsert({
       where: { id: customer.id },
@@ -248,7 +242,6 @@ async function main() {
   }
 
   // 8. Employees
-  console.log('👔 Creando empleados...');
   const positionVendedorId = '550e8400-e29b-41d4-a716-446655440070';
   console.log('👔 Creando cargo y parámetros RRHH...');
   await prisma.position.upsert({
@@ -279,6 +272,7 @@ async function main() {
     },
   });
 
+  if (!isProd) console.log('👔 Creando empleados...');
   for (const employee of seeds.employees) {
     const empRow = {
       rut: employee.rut,

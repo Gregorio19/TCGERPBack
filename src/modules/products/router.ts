@@ -17,10 +17,11 @@ import { z } from 'zod';
 
 export const productsRouter = new Hono();
 
-// Listar productos (público o autenticado)
+// Listar productos
 productsRouter.get(
   '/',
   authJWT,
+  rbacGuard,
   validateQuery(listProductsQueryDto),
   async (c) => {
     const query = (c as any).get('validatedQuery') as z.infer<typeof listProductsQueryDto>;
@@ -106,10 +107,30 @@ productsRouter.post(
   }
 );
 
+// Estadísticas
+productsRouter.get('/stats', authJWT, rbacGuard, async (c) => {
+  const stats = await productService.getStats();
+  return ok(c, stats);
+});
+
+// Categorías
+productsRouter.get('/categories', authJWT, rbacGuard, async (c) => {
+  const categories = await productService.getCategories();
+  return ok(c, categories);
+});
+
+// Productos con stock bajo
+productsRouter.get('/low-stock', authJWT, rbacGuard, async (c) => {
+  const threshold = parseInt(c.req.query('threshold') || '10', 10);
+  const products = await productService.getLowStock(threshold);
+  return ok(c, products.map(mapProduct));
+});
+
 // Obtener producto por ID
 productsRouter.get(
   '/:id',
   authJWT,
+  rbacGuard,
   validateParams(productIdParamDto),
   async (c) => {
     const params = (c as any).get('validatedParams') as { id: number };
@@ -162,23 +183,3 @@ productsRouter.patch(
     return ok(c, mapProduct(product));
   }
 );
-
-// Estadísticas
-productsRouter.get('/stats', authJWT, async (c) => {
-  const stats = await productService.getStats();
-  return ok(c, stats);
-});
-
-// Categorías
-productsRouter.get('/categories', authJWT, async (c) => {
-  const categories = await productService.getCategories();
-  return ok(c, categories);
-});
-
-// Productos con stock bajo
-productsRouter.get('/low-stock', authJWT, async (c) => {
-  const threshold = parseInt(c.req.query('threshold') || '10', 10);
-  const products = await productService.getLowStock(threshold);
-  return ok(c, products.map(mapProduct));
-});
-

@@ -8,6 +8,7 @@ import { docsRouter } from './modules/docs/router.js';
 import { AppError, ErrorCodes } from './lib/errors.js';
 import { error } from './lib/responses.js';
 import { logger } from './lib/logger.js';
+import { db } from './lib/db.js';
 
 export const app = new Hono();
 
@@ -28,10 +29,6 @@ app.onError((err, c) => {
     logger.error('Error desconocido:', err);
   }
 
-  if (err instanceof HTTPException) {
-    return err.getResponse();
-  }
-
   // Si es un ZodError, convertirlo a AppError
   if (err instanceof z.ZodError) {
     const details = err.errors.map((issue) => ({
@@ -46,6 +43,17 @@ app.onError((err, c) => {
       details
     );
     return error(c, appError);
+  }
+
+  const status = err instanceof AppError
+    ? err.statusCode
+    : err instanceof HTTPException ? err.status : 500;
+  if (process.env.NODE_ENV === 'production' && status >= 500) {
+    return error(c, new AppError(ErrorCodes.INTERNAL_SERVER_ERROR, 'Error interno del servidor', status));
+  }
+
+  if (err instanceof HTTPException) {
+    return err.getResponse();
   }
 
   // Si es AppError, retornarlo directamente
@@ -67,8 +75,14 @@ app.onError((err, c) => {
 });
 
 // Health check
-app.get('/health', (c) => {
-  return c.json({ status: 'ok', timestamp: new Date().toISOString() });
+app.get('/health', async (c) => {
+  try {
+    await db.$queryRaw`SELECT 1`;
+    return c.json({ status: 'ok', db: 'ok' }, 200);
+  } catch (err) {
+    logger.error('Error en el chequeo de base de datos:', err);
+    return c.json({ status: 'degraded', db: 'error' }, 503);
+  }
 });
 
 // Documentación Swagger

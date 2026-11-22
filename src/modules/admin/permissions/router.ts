@@ -18,6 +18,7 @@ export const permissionsRouter = new Hono();
 permissionsRouter.get(
   '/',
   authJWT,
+  rbacGuard,
   validateQuery(listPermissionsQueryDto),
   async (c) => {
     const query = (c as any).get('validatedQuery') as z.infer<typeof listPermissionsQueryDto>;
@@ -63,6 +64,7 @@ permissionsRouter.post(
 permissionsRouter.get(
   '/:id',
   authJWT,
+  rbacGuard,
   validateParams(permissionIdParamDto),
   async (c) => {
     const { id } = (c as any).get('validatedParams') as { id: string };

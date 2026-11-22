@@ -11,11 +11,12 @@ export const authJWT = async (c: Context, next: Next) => {
 
   const token = authHeader.substring(7);
 
+  let payload: JWTPayload;
   try {
-    const payload = verifyToken(token);
-    c.set('user', payload);
-    await next();
-  } catch (err) {
+    payload = verifyToken(token);
+  } catch {
     throw new AppError(ErrorCodes.INVALID_TOKEN, 'Token inválido o expirado', 401);
   }
+  c.set('user', payload);
+  await next();
 };

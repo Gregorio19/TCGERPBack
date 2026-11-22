@@ -50,13 +50,14 @@ const entryUpdateDto = z.object({
 });
 
 // --- Cuentas ---
-accountingRouter.get('/accounts/tree', authJWT, async (c) => {
+accountingRouter.get('/accounts/tree', authJWT, rbacGuard, async (c) => {
   return ok(c, await accountingService.getTree());
 });
 
 accountingRouter.get(
   '/accounts/:padreId/children',
   authJWT,
+  rbacGuard,
   validateParams(padreParam),
   async (c) => {
     const { padreId } = (c as { get: (k: string) => unknown }).get('validatedParams') as { padreId: string };
@@ -64,7 +65,7 @@ accountingRouter.get(
   }
 );
 
-accountingRouter.get('/accounts', authJWT, async (c) => {
+accountingRouter.get('/accounts', authJWT, rbacGuard, async (c) => {
   return ok(c, await accountingService.listAccounts());
 });
 
@@ -74,7 +75,7 @@ accountingRouter.post('/accounts', authJWT, rbacGuard, validateBody(accountCreat
   return created(c, row);
 });
 
-accountingRouter.get('/accounts/:id', authJWT, validateParams(idParam), async (c) => {
+accountingRouter.get('/accounts/:id', authJWT, rbacGuard, validateParams(idParam), async (c) => {
   const { id } = (c as { get: (k: string) => unknown }).get('validatedParams') as { id: string };
   return ok(c, await accountingService.getAccount(id));
 });
@@ -92,7 +93,7 @@ accountingRouter.delete('/accounts/:id', authJWT, rbacGuard, validateParams(idPa
 });
 
 // --- Asientos ---
-accountingRouter.get('/entries', authJWT, validateQuery(listQ), async (c) => {
+accountingRouter.get('/entries', authJWT, rbacGuard, validateQuery(listQ), async (c) => {
   const q = (c as { get: (k: string) => unknown }).get('validatedQuery') as z.infer<typeof listQ>;
   return ok(c, await accountingService.listEntries(q as Record<string, string | undefined>));
 });
@@ -107,7 +108,7 @@ accountingRouter.post('/entries', authJWT, rbacGuard, validateBody(entryCreateDt
   return created(c, row);
 });
 
-accountingRouter.get('/entries/:id', authJWT, validateParams(idParam), async (c) => {
+accountingRouter.get('/entries/:id', authJWT, rbacGuard, validateParams(idParam), async (c) => {
   const { id } = (c as { get: (k: string) => unknown }).get('validatedParams') as { id: string };
   return ok(c, await accountingService.getEntry(id));
 });
@@ -145,7 +146,7 @@ accountingRouter.post('/entries/:id/cancel', authJWT, rbacGuard, validateParams(
 });
 
 // --- Libro mayor ---
-accountingRouter.get('/ledger', authJWT, validateQuery(listQ), async (c) => {
+accountingRouter.get('/ledger', authJWT, rbacGuard, validateQuery(listQ), async (c) => {
   const q = (c as { get: (k: string) => unknown }).get('validatedQuery') as z.infer<typeof listQ>;
   return ok(c, await accountingService.listLedger(q as Record<string, string | undefined>));
 });
@@ -153,6 +154,7 @@ accountingRouter.get('/ledger', authJWT, validateQuery(listQ), async (c) => {
 accountingRouter.get(
   '/ledger/account/:cuentaId',
   authJWT,
+  rbacGuard,
   validateParams(z.object({ cuentaId: uuidSchema })),
   validateQuery(listQ),
   async (c) => {
@@ -163,7 +165,7 @@ accountingRouter.get(
 );
 
 // --- Libro IVA (listado derivado de asientos contabilizados) ---
-accountingRouter.get('/tax-books', authJWT, validateQuery(listQ), async (c) => {
+accountingRouter.get('/tax-books', authJWT, rbacGuard, validateQuery(listQ), async (c) => {
   const q = (c as { get: (k: string) => unknown }).get('validatedQuery') as z.infer<typeof listQ>;
   return ok(c, await accountingService.taxBooksList(q as Record<string, string | undefined>));
 });
@@ -172,21 +174,21 @@ const periodoParam = z.object({
   periodo: z.string().regex(/^\d{4}-\d{2}$/),
 });
 
-accountingRouter.get('/tax-books/period/:periodo', authJWT, validateParams(periodoParam), async (c) => {
+accountingRouter.get('/tax-books/period/:periodo', authJWT, rbacGuard, validateParams(periodoParam), async (c) => {
   const { periodo } = (c as { get: (k: string) => unknown }).get('validatedParams') as { periodo: string };
   return ok(c, await accountingService.taxBookByPeriod(periodo));
 });
 
-accountingRouter.get('/tax-books/stats', authJWT, async (c) => {
+accountingRouter.get('/tax-books/stats', authJWT, rbacGuard, async (c) => {
   return ok(c, await accountingService.taxBookStats());
 });
 
 // --- Estadísticas ---
-accountingRouter.get('/stats/general', authJWT, async (c) => {
+accountingRouter.get('/stats/general', authJWT, rbacGuard, async (c) => {
   return ok(c, await accountingService.statsGeneral());
 });
 
-accountingRouter.get('/stats/period/:periodo', authJWT, validateParams(periodoParam), async (c) => {
+accountingRouter.get('/stats/period/:periodo', authJWT, rbacGuard, validateParams(periodoParam), async (c) => {
   const { periodo } = (c as { get: (k: string) => unknown }).get('validatedParams') as { periodo: string };
   return ok(c, await accountingService.statsPeriod(periodo));
 });

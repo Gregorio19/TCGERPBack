@@ -22,6 +22,7 @@ export const inventoryRouter = new Hono();
 inventoryRouter.get(
   '/',
   authJWT,
+  rbacGuard,
   validateQuery(listInventoryQueryDto),
   async (c) => {
     const query = (c as any).get('validatedQuery') as z.infer<typeof listInventoryQueryDto>;
@@ -71,7 +72,7 @@ inventoryRouter.get(
 );
 
 // Estadísticas de inventario (DEBE IR ANTES DE /:id)
-inventoryRouter.get('/stats', authJWT, async (c) => {
+inventoryRouter.get('/stats', authJWT, rbacGuard, async (c) => {
   const stats = await inventoryService.getStats();
   return ok(c, stats);
 });
@@ -80,6 +81,7 @@ inventoryRouter.get('/stats', authJWT, async (c) => {
 inventoryRouter.get(
   '/alerts',
   authJWT,
+  rbacGuard,
   validateQuery(listAlertsQueryDto),
   async (c) => {
     const query = (c as any).get('validatedQuery') as z.infer<typeof listAlertsQueryDto>;
@@ -92,14 +94,14 @@ inventoryRouter.get(
 );
 
 // Productos con stock bajo
-inventoryRouter.get('/low-stock', authJWT, async (c) => {
+inventoryRouter.get('/low-stock', authJWT, rbacGuard, async (c) => {
   const threshold = parseInt(c.req.query('threshold') || '10', 10);
   const products = await inventoryService.getLowStock(threshold);
   return ok(c, products.map(mapProduct));
 });
 
 // Productos sin stock
-inventoryRouter.get('/out-of-stock', authJWT, async (c) => {
+inventoryRouter.get('/out-of-stock', authJWT, rbacGuard, async (c) => {
   const products = await inventoryService.getOutOfStock();
   return ok(c, products.map(mapProduct));
 });
@@ -123,7 +125,7 @@ inventoryRouter.patch(
 );
 
 // Listar ubicaciones (sucursales) (DEBE IR ANTES DE /:id)
-inventoryRouter.get('/locations', authJWT, async (c) => {
+inventoryRouter.get('/locations', authJWT, rbacGuard, async (c) => {
   const locations = await inventoryService.getLocations();
   return ok(c, locations);
 });
@@ -132,6 +134,7 @@ inventoryRouter.get('/locations', authJWT, async (c) => {
 inventoryRouter.get(
   '/by-location/:location',
   authJWT,
+  rbacGuard,
   validateParams(locationParamDto),
   validateQuery(listInventoryQueryDto),
   async (c) => {
@@ -173,6 +176,7 @@ inventoryRouter.post(
 inventoryRouter.get(
   '/:id',
   authJWT,
+  rbacGuard,
   validateParams(inventoryIdParamDto),
   async (c) => {
     const params = (c as any).get('validatedParams') as { id: number };

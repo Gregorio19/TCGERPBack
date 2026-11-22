@@ -1,6 +1,6 @@
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import app from '../../app.js';
+import { requestAsAdmin } from '../../test-utils/auth.js';
 import { setAttachmentStorageForTests } from '../../lib/storage/index.js';
 import { createMemoryAttachmentStorage } from '../../lib/storage/memory-storage.js';
 import { env } from '../../lib/env.js';
@@ -13,24 +13,10 @@ const PNG_1X1 = Buffer.from(
   'base64'
 );
 
-async function loginAdmin(): Promise<string> {
-  const loginRes = await app.request('http://localhost/api/auth/login', {
+async function createVisit(): Promise<string> {
+  const res = await requestAsAdmin(`/api/customers/${CUSTOMER_ID}/visits`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username: 'admin', password: 'password123' }),
-  });
-  assert.equal(loginRes.status, 200);
-  const { token } = (await loginRes.json()) as { token: string };
-  return token;
-}
-
-async function createVisit(token: string): Promise<string> {
-  const res = await app.request(`http://localhost/api/customers/${CUSTOMER_ID}/visits`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
     body: JSON.stringify({ descripcion: 'Visita con adjuntos de prueba' }),
   });
   assert.equal(res.status, 201);
@@ -50,16 +36,14 @@ describe('Clientes — adjuntos por visita (integración)', () => {
   });
 
   it('rechaza tipo de archivo no permitido en visita', async () => {
-    const token = await loginAdmin();
-    const visitId = await createVisit(token);
+    const visitId = await createVisit();
     const form = new FormData();
     form.append('file', new Blob(['texto'], { type: 'text/plain' }), 'nota.txt');
 
-    const res = await app.request(
-      `http://localhost/api/customers/${CUSTOMER_ID}/visits/${visitId}/attachments`,
+    const res = await requestAsAdmin(
+      `/api/customers/${CUSTOMER_ID}/visits/${visitId}/attachments`,
       {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
         body: form,
       }
     );
@@ -67,17 +51,15 @@ describe('Clientes — adjuntos por visita (integración)', () => {
   });
 
   it('rechaza archivo mayor a 10 MB en visita', async () => {
-    const token = await loginAdmin();
-    const visitId = await createVisit(token);
+    const visitId = await createVisit();
     const oversized = Buffer.alloc(env.ATTACHMENTS_MAX_BYTES + 1, 0xff);
     const form = new FormData();
     form.append('file', new Blob([oversized], { type: 'application/pdf' }), 'grande.pdf');
 
-    const res = await app.request(
-      `http://localhost/api/customers/${CUSTOMER_ID}/visits/${visitId}/attachments`,
+    const res = await requestAsAdmin(
+      `/api/customers/${CUSTOMER_ID}/visits/${visitId}/attachments`,
       {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
         body: form,
       }
     );
@@ -85,17 +67,15 @@ describe('Clientes — adjuntos por visita (integración)', () => {
   });
 
   it('sube adjunto, lista en visita, embebe en GET visits, descarga y elimina', async () => {
-    const token = await loginAdmin();
-    const visitId = await createVisit(token);
+    const visitId = await createVisit();
     const form = new FormData();
     form.append('file', new Blob([PNG_1X1], { type: 'image/png' }), 'evidencia.png');
     form.append('descripcion', 'Foto de la visita');
 
-    const postRes = await app.request(
-      `http://localhost/api/customers/${CUSTOMER_ID}/visits/${visitId}/attachments`,
+    const postRes = await requestAsAdmin(
+      `/api/customers/${CUSTOMER_ID}/visits/${visitId}/attachments`,
       {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
         body: form,
       }
     );
@@ -111,8 +91,8 @@ describe('Clientes — adjuntos por visita (integración)', () => {
     assert.equal(created.originalName, 'evidencia.png');
     assert.ok(created.downloadPath.includes(visitId));
 
-    const listRes = await app.request(
-      `http://localhost/api/customers/${CUSTOMER_ID}/visits/${visitId}/attachments?page=1&limit=10`
+    const listRes = await requestAsAdmin(
+      `/api/customers/${CUSTOMER_ID}/visits/${visitId}/attachments?page=1&limit=10`
     );
     assert.equal(listRes.status, 200);
     const listJson = (await listRes.json()) as {
@@ -120,8 +100,8 @@ describe('Clientes — adjuntos por visita (integración)', () => {
     };
     assert.ok(listJson.data.some((a) => a.id === created.id));
 
-    const visitsRes = await app.request(
-      `http://localhost/api/customers/${CUSTOMER_ID}/visits?page=1&limit=20`
+    const visitsRes = await requestAsAdmin(
+      `/api/customers/${CUSTOMER_ID}/visits?page=1&limit=20`
     );
     assert.equal(visitsRes.status, 200);
     const visitsJson = (await visitsRes.json()) as {
@@ -131,20 +111,18 @@ describe('Clientes — adjuntos por visita (integración)', () => {
     assert.ok(visitRow);
     assert.ok(visitRow!.attachments.some((a) => a.id === created.id && a.originalName === 'evidencia.png'));
 
-    const downloadRes = await app.request(
-      `http://localhost/api/customers/${CUSTOMER_ID}/visits/${visitId}/attachments/${created.id}/download`,
+    const downloadRes = await requestAsAdmin(
+      `/api/customers/${CUSTOMER_ID}/visits/${visitId}/attachments/${created.id}/download`,
       {
-        headers: { Authorization: `Bearer ${token}` },
         redirect: 'manual',
       }
     );
     assert.equal(downloadRes.status, 302);
 
-    const deleteRes = await app.request(
-      `http://localhost/api/customers/${CUSTOMER_ID}/visits/${visitId}/attachments/${created.id}`,
+    const deleteRes = await requestAsAdmin(
+      `/api/customers/${CUSTOMER_ID}/visits/${visitId}/attachments/${created.id}`,
       {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
       }
     );
     assert.equal(deleteRes.status, 204);

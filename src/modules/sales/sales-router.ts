@@ -30,27 +30,27 @@ const patchSaleStatusDto = z.object({
   estado: z.enum(['pendiente', 'completada', 'cancelada']),
 });
 
-salesApiRouter.get('/stats', authJWT, async (c) => {
+salesApiRouter.get('/stats', authJWT, rbacGuard, async (c) => {
   return ok(c, await orderService.salesStats());
 });
 
-salesApiRouter.get('/monthly', authJWT, async (c) => {
+salesApiRouter.get('/monthly', authJWT, rbacGuard, async (c) => {
   return ok(c, await orderService.salesMonthly(12));
 });
 
-salesApiRouter.get('/recent', authJWT, validateQuery(recentQueryDto), async (c) => {
+salesApiRouter.get('/recent', authJWT, rbacGuard, validateQuery(recentQueryDto), async (c) => {
   const q = (c as { get: (k: string) => unknown }).get('validatedQuery') as z.infer<typeof recentQueryDto>;
   const lim = q.limit ? parseInt(q.limit, 10) : 10;
   return ok(c, await orderService.salesRecent(Number.isFinite(lim) ? lim : 10));
 });
 
-salesApiRouter.get('/top-customers', authJWT, validateQuery(topCustomersQueryDto), async (c) => {
+salesApiRouter.get('/top-customers', authJWT, rbacGuard, validateQuery(topCustomersQueryDto), async (c) => {
   const q = (c as { get: (k: string) => unknown }).get('validatedQuery') as z.infer<typeof topCustomersQueryDto>;
   const lim = q.limit ? parseInt(q.limit, 10) : 10;
   return ok(c, await orderService.topCustomers(Number.isFinite(lim) ? lim : 10));
 });
 
-salesApiRouter.get('/', authJWT, validateQuery(listOrdersQueryDto), async (c) => {
+salesApiRouter.get('/', authJWT, rbacGuard, validateQuery(listOrdersQueryDto), async (c) => {
   const query = (c as { get: (k: string) => unknown }).get('validatedQuery') as z.infer<typeof listOrdersQueryDto>;
   const queryRecord: Record<string, string | undefined> = {};
   if (query.page) queryRecord.page = query.page;
@@ -88,7 +88,7 @@ salesApiRouter.post('/', authJWT, rbacGuard, validateBody(createOrderDto), async
   return created(c, mapOrder(order));
 });
 
-salesApiRouter.get('/:id', authJWT, validateParams(orderIdParamDto), async (c) => {
+salesApiRouter.get('/:id', authJWT, rbacGuard, validateParams(orderIdParamDto), async (c) => {
   const params = (c as { get: (k: string) => unknown }).get('validatedParams') as { id: string };
   const order = await orderService.getById(params.id);
   return ok(c, mapOrder(order));

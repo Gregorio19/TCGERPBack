@@ -49,6 +49,7 @@ export const hrRouter = new Hono();
 hrRouter.get(
   '/employees/estadisticas',
   authJWT,
+  rbacGuard,
   async (c) => {
     const data = await hrService.estadisticas();
     return c.json(hrEnvelope(data));
@@ -58,6 +59,7 @@ hrRouter.get(
 hrRouter.get(
   '/employees',
   authJWT,
+  rbacGuard,
   validateQuery(listEmployeesQueryDto),
   async (c) => {
     const q = (c as unknown as { get: (k: string) => unknown }).get('validatedQuery') as z.infer<
@@ -97,6 +99,7 @@ hrRouter.post(
 hrRouter.get(
   '/employees/:id',
   authJWT,
+  rbacGuard,
   validateParams(employeeIdParamDto),
   async (c) => {
     const { id } = (c as unknown as { get: (k: string) => unknown }).get('validatedParams') as {
@@ -161,6 +164,7 @@ hrRouter.post(
 hrRouter.get(
   '/employees/:id/schedules/templates',
   authJWT,
+  rbacGuard,
   validateParams(employeeIdParamDto),
   validateQuery(listScheduleTemplatesQueryDto),
   async (c) => {
@@ -232,6 +236,7 @@ hrRouter.post(
 hrRouter.get(
   '/employees/:id/schedules/exceptions',
   authJWT,
+  rbacGuard,
   validateParams(employeeIdParamDto),
   validateQuery(listScheduleExceptionsQueryDto),
   async (c) => {
@@ -285,6 +290,7 @@ hrRouter.delete(
 hrRouter.get(
   '/employees/:id/schedules/calendar',
   authJWT,
+  rbacGuard,
   validateParams(employeeIdParamDto),
   validateQuery(scheduleCalendarQueryDto),
   async (c) => {
@@ -302,6 +308,7 @@ hrRouter.get(
 hrRouter.get(
   '/schedules/calendar',
   authJWT,
+  rbacGuard,
   validateQuery(scheduleCalendarBulkQueryDto),
   async (c) => {
     const query = (c as unknown as { get: (k: string) => unknown }).get('validatedQuery') as z.infer<
@@ -334,6 +341,7 @@ hrRouter.put(
 hrRouter.get(
   '/contracts/empleado/:empleadoId',
   authJWT,
+  rbacGuard,
   validateParams(empleadoIdContractParamDto),
   async (c) => {
     const { empleadoId } = (c as unknown as { get: (k: string) => unknown }).get(
@@ -347,6 +355,7 @@ hrRouter.get(
 hrRouter.get(
   '/contracts',
   authJWT,
+  rbacGuard,
   validateQuery(listContractsQueryDto),
   async (c) => {
     const q = (c as unknown as { get: (k: string) => unknown }).get('validatedQuery') as z.infer<
@@ -392,6 +401,7 @@ hrRouter.post(
 hrRouter.get(
   '/contracts/:id',
   authJWT,
+  rbacGuard,
   validateParams(contractIdParamDto),
   async (c) => {
     const { id } = (c as unknown as { get: (k: string) => unknown }).get('validatedParams') as {
@@ -424,6 +434,7 @@ hrRouter.put(
 hrRouter.get(
   '/payroll/resumen/:periodo',
   authJWT,
+  rbacGuard,
   validateParams(periodoParamDto),
   async (c) => {
     const { periodo } = (c as unknown as { get: (k: string) => unknown }).get('validatedParams') as {
@@ -437,6 +448,7 @@ hrRouter.get(
 hrRouter.get(
   '/payroll/periodo/:periodo',
   authJWT,
+  rbacGuard,
   validateParams(periodoParamDto),
   async (c) => {
     const { periodo } = (c as unknown as { get: (k: string) => unknown }).get('validatedParams') as {
@@ -510,6 +522,7 @@ hrRouter.post(
 hrRouter.get(
   '/payroll',
   authJWT,
+  rbacGuard,
   validateQuery(listPayrollQueryDto),
   async (c) => {
     const q = (c as unknown as { get: (k: string) => unknown }).get('validatedQuery') as z.infer<
@@ -532,6 +545,7 @@ hrRouter.get(
 hrRouter.get(
   '/payroll/:id',
   authJWT,
+  rbacGuard,
   validateParams(payrollIdParamDto),
   async (c) => {
     const { id } = (c as unknown as { get: (k: string) => unknown }).get('validatedParams') as {
@@ -546,6 +560,7 @@ hrRouter.get(
 hrRouter.get(
   '/contributions/periodo/:periodo',
   authJWT,
+  rbacGuard,
   validateParams(periodoParamDto),
   async (c) => {
     const { periodo } = (c as unknown as { get: (k: string) => unknown }).get('validatedParams') as {
@@ -591,6 +606,7 @@ hrRouter.post(
 hrRouter.get(
   '/contributions',
   authJWT,
+  rbacGuard,
   validateQuery(listContributionsQueryDto),
   async (c) => {
     const q = (c as unknown as { get: (k: string) => unknown }).get('validatedQuery') as z.infer<
@@ -613,6 +629,7 @@ hrRouter.get(
 hrRouter.get(
   '/contributions/:id',
   authJWT,
+  rbacGuard,
   validateParams(contributionIdParamDto),
   async (c) => {
     const { id } = (c as unknown as { get: (k: string) => unknown }).get('validatedParams') as {
@@ -624,7 +641,7 @@ hrRouter.get(
 );
 
 // --- Cargos ---
-hrRouter.get('/positions', authJWT, async (c) => {
+hrRouter.get('/positions', authJWT, rbacGuard, async (c) => {
   const rows = await hrService.listPositions();
   return c.json(hrEnvelope(rows.map(mapCargo)));
 });
@@ -632,6 +649,7 @@ hrRouter.get('/positions', authJWT, async (c) => {
 hrRouter.get(
   '/positions/:id',
   authJWT,
+  rbacGuard,
   validateParams(positionIdParamDto),
   async (c) => {
     const { id } = (c as unknown as { get: (k: string) => unknown }).get('validatedParams') as {
@@ -643,7 +661,7 @@ hrRouter.get(
 );
 
 // --- Parámetros ---
-hrRouter.get('/parametros/calculo', authJWT, async (c) => {
+hrRouter.get('/parametros/calculo', authJWT, rbacGuard, async (c) => {
   const data = await hrService.getParametros();
   return c.json(hrEnvelope(data));
 });

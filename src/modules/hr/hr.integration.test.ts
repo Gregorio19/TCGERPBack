@@ -1,10 +1,10 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import app from '../../app.js';
+import { requestAsAdmin } from '../../test-utils/auth.js';
 
 describe('RRHH API (integración)', () => {
   it('GET /api/hr/positions devuelve ApiResponse con data array', async () => {
-    const res = await app.request('http://localhost/api/hr/positions');
+    const res = await requestAsAdmin('/api/hr/positions');
     assert.equal(res.status, 200);
     const json = (await res.json()) as {
       success: boolean;
@@ -16,7 +16,7 @@ describe('RRHH API (integración)', () => {
   });
 
   it('GET /api/hr/parametros/calculo devuelve porcentajes numéricos', async () => {
-    const res = await app.request('http://localhost/api/hr/parametros/calculo');
+    const res = await requestAsAdmin('/api/hr/parametros/calculo');
     assert.equal(res.status, 200);
     const json = (await res.json()) as {
       success: boolean;
@@ -32,7 +32,7 @@ describe('RRHH API (integración)', () => {
   });
 
   it('GET /api/hr/employees devuelve paginación estándar', async () => {
-    const res = await app.request('http://localhost/api/hr/employees?limit=5');
+    const res = await requestAsAdmin('/api/hr/employees?limit=5');
     assert.equal(res.status, 200);
     const json = (await res.json()) as {
       success: boolean;
@@ -45,15 +45,7 @@ describe('RRHH API (integración)', () => {
   });
 
   it('Horarios: plantilla + excepción override tiene prioridad en calendario', async () => {
-    const loginRes = await app.request('http://localhost/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: 'admin', password: 'password123' }),
-    });
-    assert.equal(loginRes.status, 200, 'login seed admin/password123');
-    const { token } = (await loginRes.json()) as { token: string };
-
-    const employeesRes = await app.request('http://localhost/api/hr/employees?limit=1');
+    const employeesRes = await requestAsAdmin('/api/hr/employees?limit=1');
     assert.equal(employeesRes.status, 200);
     const employeesJson = (await employeesRes.json()) as {
       success: boolean;
@@ -62,14 +54,11 @@ describe('RRHH API (integración)', () => {
     const employeeId = employeesJson.data.data[0]?.id;
     assert.ok(employeeId, 'debe existir al menos un empleado para test');
 
-    const templateRes = await app.request(
-      `http://localhost/api/hr/employees/${employeeId}/schedules/templates`,
+    const templateRes = await requestAsAdmin(
+      `/api/hr/employees/${employeeId}/schedules/templates`,
       {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           dayOfWeek: 0, // lunes
           startTime: '09:00',
@@ -84,14 +73,11 @@ describe('RRHH API (integración)', () => {
       `template status inesperado: ${templateRes.status} body=${templateText}`
     );
 
-    const exceptionRes = await app.request(
-      `http://localhost/api/hr/employees/${employeeId}/schedules/exceptions`,
+    const exceptionRes = await requestAsAdmin(
+      `/api/hr/employees/${employeeId}/schedules/exceptions`,
       {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           date: '2026-04-06', // lunes
           type: 'override',
@@ -107,8 +93,8 @@ describe('RRHH API (integración)', () => {
       `exception status inesperado: ${exceptionRes.status} body=${exceptionText}`
     );
 
-    const calRes = await app.request(
-      `http://localhost/api/hr/employees/${employeeId}/schedules/calendar?from=2026-04-06&to=2026-04-06`
+    const calRes = await requestAsAdmin(
+      `/api/hr/employees/${employeeId}/schedules/calendar?from=2026-04-06&to=2026-04-06`
     );
     assert.equal(calRes.status, 200);
     const calJson = (await calRes.json()) as {
@@ -129,7 +115,7 @@ describe('RRHH API (integración)', () => {
   });
 
   it('Horarios: calendario masivo agrupa por empleado y respeta filtros', async () => {
-    const employeesRes = await app.request('http://localhost/api/hr/employees?limit=1');
+    const employeesRes = await requestAsAdmin('/api/hr/employees?limit=1');
     assert.equal(employeesRes.status, 200);
     const employeesJson = (await employeesRes.json()) as {
       success: boolean;
@@ -138,8 +124,8 @@ describe('RRHH API (integración)', () => {
     const employee = employeesJson.data.data[0];
     assert.ok(employee?.id, 'debe existir al menos un empleado para test');
 
-    const calBulkRes = await app.request(
-      `http://localhost/api/hr/schedules/calendar?from=2026-04-06&to=2026-04-06&estado=${employee.estado}&employeeIds=${employee.id}`
+    const calBulkRes = await requestAsAdmin(
+      `/api/hr/schedules/calendar?from=2026-04-06&to=2026-04-06&estado=${employee.estado}&employeeIds=${employee.id}`
     );
     const calBulkText = await calBulkRes.text();
     assert.equal(calBulkRes.status, 200, calBulkText);

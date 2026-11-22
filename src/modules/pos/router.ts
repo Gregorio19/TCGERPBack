@@ -26,7 +26,7 @@ const posSaleDto = z.object({
     .min(1),
 });
 
-posRouter.get('/products', authJWT, async (c) => {
+posRouter.get('/products', authJWT, rbacGuard, async (c) => {
   const result = await productService.list({
     page: 1,
     pageSize: 100,

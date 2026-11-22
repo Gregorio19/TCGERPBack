@@ -19,6 +19,7 @@ export const usersRouter = new Hono();
 usersRouter.get(
   '/',
   authJWT,
+  rbacGuard,
   validateQuery(listUsersQueryDto),
   async (c) => {
     const query = (c as any).get('validatedQuery') as z.infer<typeof listUsersQueryDto>;
@@ -60,6 +61,7 @@ usersRouter.post(
 usersRouter.get(
   '/:id',
   authJWT,
+  rbacGuard,
   validateParams(userIdParamDto),
   async (c) => {
     const { id } = (c as any).get('validatedParams') as { id: string };
