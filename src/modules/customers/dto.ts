@@ -103,8 +103,11 @@ export const createCustomerVisitDto = z.object({
   fecha: z.string().datetime({ offset: true }).optional(),
 });
 
-export const updateCustomerVisitDto = createCustomerVisitDto.partial().extend({
-  tipo: customerVisitTypeDto.default('otro'),
+// PATCH: sin default, así editar solo la nota no cambia el tipo.
+export const updateCustomerVisitDto = z.object({
+  tipo: customerVisitTypeDto.optional(),
+  descripcion: z.string().min(1).max(50000).optional(),
+  fecha: z.string().datetime({ offset: true }).optional(),
 });
 
 const paginationQueryDto = z.object({

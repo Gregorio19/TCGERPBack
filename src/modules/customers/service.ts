@@ -408,7 +408,7 @@ export const customerService = {
   async updateVisit(
     customerId: string,
     visitId: string,
-    data: { descripcion?: string; fecha?: Date; tipo: CustomerVisitType }
+    data: { descripcion?: string; fecha?: Date; tipo?: CustomerVisitType }
   ) {
     try {
       const visit = await db.customerVisit.update({

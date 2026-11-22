@@ -3556,7 +3556,6 @@ paths:
                 tipo:
                   allOf:
                     - $ref: '#/components/schemas/CustomerVisitType'
-                  default: otro
                 descripcion:
                   type: string
                   maxLength: 50000
