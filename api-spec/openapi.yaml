@@ -168,7 +168,7 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
     TooManyLoginAttempts:
-      description: Demasiados intentos de inicio de sesión para esta IP y usuario
+      description: Límite de 5 fallos por IP y usuario o 10 por usuario en 15 minutos.
       content:
         application/json:
           schema:
@@ -442,10 +442,11 @@ components:
       allOf:
         - $ref: '#/components/schemas/ReturnRequest'
         - type: object
-          required: [id, orderId, branchId, userId, cashSessionId, refundAmount, createdAt]
+          required: [id, orderId, idempotencyKey, branchId, userId, cashSessionId, refundAmount, createdAt]
           properties:
             id: { type: string, format: uuid }
             orderId: { type: string, format: uuid }
+            idempotencyKey: { type: string }
             branchId: { type: string, format: uuid }
             userId: { type: string, format: uuid }
             cashSessionId: { type: [string, 'null'], format: uuid }
@@ -771,7 +772,7 @@ components:
           type: array
           minItems: 1
           maxItems: 100
-          description: Opcional. Debe cubrir el total. El exceso de efectivo se devuelve como vuelto.
+          description: Debe cubrir el total. En cualquier estado, el efectivo exige una caja abierta del usuario en la sucursal y queda asociado a ella. El exceso de efectivo se devuelve como vuelto.
           items:
             $ref: '#/components/schemas/PaymentInput'
         estado:
@@ -805,6 +806,13 @@ components:
           type: integer
           format: int64
           minimum: 0
+        payments:
+          type: array
+          minItems: 1
+          maxItems: 100
+          description: Solo al completar una orden sin pagos registrados. El efectivo requiere la caja abierta del usuario que completa la orden en la sucursal.
+          items:
+            $ref: '#/components/schemas/PaymentInput'
 
     OrderItemResponse:
       type: object
@@ -2683,24 +2691,40 @@ paths:
       description: |
         Disponible para órdenes completadas o parcialmente devueltas. Reintegra el inventario
         y reembolsa el monto de los artículos con descuentos prorrateados e IVA, excluido el envío.
-        El efectivo requiere una caja abierta del usuario en la sucursal de la orden.
+        El efectivo requiere una caja abierta del usuario en la sucursal de la orden, con saldo suficiente.
+        Repetir una clave para la misma orden devuelve la devolución existente.
       x-required-permission: sales.edit
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: { type: string, minLength: 8, maxLength: 100 }
       requestBody:
         required: true
         content:
           application/json:
             schema: { $ref: '#/components/schemas/ReturnRequest' }
       responses:
+        '200':
+          description: Devolución existente para la misma orden y clave
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrderReturn' }
         '201':
           description: Devolución registrada
           content:
             application/json:
               schema: { $ref: '#/components/schemas/OrderReturn' }
+        '400':
+          description: Falta Idempotency-Key o su longitud está fuera de rango
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409':
-          description: Orden sin unidades por devolver, caja cerrada o saldo fuera de rango
+          description: Clave usada en otra orden, estado de orden incompatible, caja sin abrir, efectivo insuficiente o saldo de crédito fuera de rango
         '422': { $ref: '#/components/responses/Error422' }
 
   /customers/{id}/store-credit:
@@ -2743,7 +2767,7 @@ paths:
     post:
       tags: [customers]
       summary: Comprar productos al cliente y registrar su visita
-      description: El efectivo requiere una caja abierta del usuario en la sucursal.
+      description: El efectivo requiere una caja abierta del usuario en la sucursal, con saldo suficiente para pagar la compra.
       x-required-permission: customers.edit
       requestBody:
         required: true
@@ -2760,7 +2784,7 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409':
-          description: Caja cerrada o saldo de crédito fuera de rango
+          description: Caja sin abrir, efectivo insuficiente o saldo de crédito fuera de rango
         '422': { $ref: '#/components/responses/Error422' }
 
   /alerts/stock:
@@ -2918,6 +2942,7 @@ paths:
     post:
       tags: [auth]
       summary: Renovar la sesión y rotar el refresh token
+      description: Las sesiones con tokens antiguos guardados en texto plano requieren iniciar sesión de nuevo.
       security: []
       requestBody:
         required: true
@@ -3936,7 +3961,7 @@ paths:
         '400':
           description: Los pagos no cuadran o el total está fuera de rango
         '409':
-          description: Stock de sucursal insuficiente o crédito en tienda insuficiente
+          description: Caja sin abrir, stock de sucursal insuficiente o crédito en tienda insuficiente
         '422':
           $ref: '#/components/responses/Error422'
         '401':
@@ -3978,6 +4003,12 @@ paths:
           schema:
             type: string
             format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateOrderRequest'
       responses:
         '200':
           description: Venta actualizada
@@ -3986,9 +4017,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/OrderResponse'
         '400':
-          description: El total actualizado debe coincidir con los pagos registrados
+          description: Los pagos deben cubrir el total de la orden actualizado
         '409':
-          description: Stock de sucursal insuficiente al completar la orden
+          description: Caja sin abrir, stock de sucursal insuficiente o crédito en tienda insuficiente al completar la orden
+        '422':
+          $ref: '#/components/responses/Error422'
         '404':
           $ref: '#/components/responses/NotFound'
         '401':
@@ -4062,6 +4095,8 @@ paths:
                 estado:
                   type: string
                   enum: [pendiente, completada, cancelada]
+                payments:
+                  $ref: '#/components/schemas/UpdateOrderRequest/properties/payments'
       responses:
         '200':
           description: Estado actualizado
@@ -4069,8 +4104,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/OrderResponse'
+        '400':
+          description: Los pagos deben cubrir el total de la orden
         '409':
-          description: Stock de sucursal insuficiente al completar la orden
+          description: Caja sin abrir, stock de sucursal insuficiente o crédito en tienda insuficiente al completar la orden
+        '422':
+          $ref: '#/components/responses/Error422'
         '404':
           $ref: '#/components/responses/NotFound'
         '401':
@@ -4267,7 +4306,10 @@ paths:
       tags: [sales]
       summary: Cerrar y cuadrar caja
       x-required-permission: sales.create
-      description: El saldo esperado suma el fondo inicial y los pagos aplicados en efectivo. La diferencia es el monto contado menos el esperado.
+      description: |
+        Solo puede cerrar la caja el usuario que la abrió o un supervisor con el permiso `admin.view`.
+        El saldo esperado suma el fondo inicial y las ventas en efectivo y resta las devoluciones
+        y compras al cliente pagadas en efectivo. La diferencia es el monto contado menos el esperado.
       parameters:
         - name: id
           in: path
@@ -4514,7 +4556,7 @@ paths:
         '400':
           description: Los pagos no cuadran o el total está fuera de rango
         '409':
-          description: Stock de sucursal insuficiente o crédito en tienda insuficiente
+          description: Caja sin abrir, stock de sucursal insuficiente o crédito en tienda insuficiente
         '422':
           $ref: '#/components/responses/Error422'
         '403':
@@ -4571,9 +4613,9 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
         '400':
-          description: El total actualizado debe coincidir con los pagos registrados
+          description: Los pagos deben cubrir el total de la orden actualizado
         '409':
-          description: Stock de sucursal insuficiente al completar la orden
+          description: Caja sin abrir, stock de sucursal insuficiente o crédito en tienda insuficiente al completar la orden
         '404':
           $ref: '#/components/responses/NotFound'
         '422':

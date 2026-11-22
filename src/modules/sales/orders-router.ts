@@ -1,4 +1,5 @@
 import { Hono, type Context } from 'hono';
+import { validator } from 'hono/validator';
 import { authJWT, getAuthUser } from '../../middlewares/auth-jwt.js';
 import { rbacGuard } from '../../middlewares/rbac-guard.js';
 import { validateBody, validateQuery, validateParams } from '../../lib/validation.js';
@@ -13,9 +14,11 @@ import { createReturn, createReturnDto, listReturns } from './returns.js';
 import { ok, created, noContent } from '../../lib/responses.js';
 import { parsePagination } from '../../lib/pagination.js';
 import { mapOrder } from '../../lib/mapper.js';
+import { AppError, ErrorCodes } from '../../lib/errors.js';
 import { z } from 'zod';
 
 export const ordersRouter = new Hono();
+const idempotencyKeyDto = z.string().min(8).max(100);
 
 // Listar órdenes
 ordersRouter.get(
@@ -130,10 +133,19 @@ ordersRouter.get('/:id/returns', authJWT, rbacGuard, validateParams(orderIdParam
 });
 
 ordersRouter.post(
-  '/:id/returns', authJWT, rbacGuard, validateParams(orderIdParamDto), validateBody(createReturnDto),
+  '/:id/returns', authJWT, rbacGuard, validateParams(orderIdParamDto),
+  validator('header', (headers) => {
+    const key = idempotencyKeyDto.safeParse(headers['idempotency-key']);
+    if (!key.success) {
+      throw new AppError(ErrorCodes.BAD_REQUEST, 'Idempotency-Key debe tener entre 8 y 100 caracteres', 400);
+    }
+    return key.data;
+  }),
+  validateBody(createReturnDto),
   async (c) => {
     const { id } = (c as Context).get('validatedParams') as z.infer<typeof orderIdParamDto>;
     const input = (c as Context).get('validatedBody') as z.infer<typeof createReturnDto>;
-    return created(c, await createReturn(id, getAuthUser(c).userId, input));
+    const { result, replayed } = await createReturn(id, getAuthUser(c).userId, c.req.valid('header'), input);
+    return replayed ? ok(c, result) : created(c, result);
   }
 );

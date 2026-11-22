@@ -25,6 +25,7 @@ export async function issueRefreshToken(userId: string): Promise<string> {
 export async function consumeRefreshToken(rawToken: string): Promise<string | null> {
   const row = await db.refreshToken.findUnique({
     where: { tokenHash: hashRefreshToken(rawToken) },
+    select: { id: true, userId: true, expiresAt: true },
   });
   if (!row) return null;
   const { count } = await db.refreshToken.deleteMany({ where: { id: row.id } });

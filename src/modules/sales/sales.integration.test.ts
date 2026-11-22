@@ -70,6 +70,19 @@ it('POS: exige caja, registra pagos y stock de forma atómica y permite cuadrar 
     assert.equal(await db.order.count({ where: { clienteId: customerId } }), 0);
   });
 
+  const pendingOrder = {
+    clienteId: customerId, sucursalId: branchId, canal: 'online', tipoDocumento: 'boleta',
+    estado: 'pendiente', items: [{ productId, cantidad: 1, precioUnitario: 1000 }],
+  };
+  const cashPayment = [{ method: 'efectivo', amount: 1190 }];
+  await t.test('rechaza crear órdenes pendientes o completadas con efectivo sin caja', async () => {
+    for (const estado of ['pendiente', 'completada']) {
+      const error = await expectJson(await post('/api/orders', { ...pendingOrder, estado, payments: cashPayment }), 409);
+      assert.equal(error.error.message, 'Debes abrir caja antes de vender');
+    }
+    assert.equal(await db.order.count({ where: { clienteId: customerId } }), 0);
+  });
+
   const session = await expectJson(await post('/api/cash-sessions/open', { branchId, openingAmount: 5000 }), 201);
 
   await t.test('completa una venta con pagos mixtos, vuelto y vendedor', async () => {
@@ -178,6 +191,30 @@ it('POS: exige caja, registra pagos y stock de forma atómica y permite cuadrar 
     }
     assert.equal(await db.stockMovement.count({ where: { refType: 'order', refId: order.id } }), 1);
     assert.equal((await db.product.findUniqueOrThrow({ where: { id: productId } })).stock, 6);
+  });
+
+  await t.test('registra efectivo al completar una orden pendiente sin pagos', async () => {
+    const order = await expectJson(await post('/api/orders', pendingOrder), 201);
+    assert.deepEqual(order.payments, []);
+    const complete = () => requestAsAdmin(`/api/orders/${order.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ estado: 'completada', payments: cashPayment }),
+    });
+    await expectJson(await complete(), 409);
+    assert.equal(await db.payment.count({ where: { orderId: order.id } }), 0);
+    assert.equal(await db.stockMovement.count({ where: { refType: 'order', refId: order.id } }), 0);
+    assert.equal((await db.order.findUniqueOrThrow({ where: { id: order.id } })).estado, 'pendiente');
+
+    const reopened = await expectJson(await post('/api/cash-sessions/open', { branchId, openingAmount: 0 }), 201);
+    const completed = await expectJson(await complete(), 200);
+    assert.equal(completed.estado, 'completada');
+    assert.equal(completed.payments.length, 1);
+    assert.equal(completed.payments[0].cashSessionId, reopened.id);
+
+    const paidPending = await expectJson(await post('/api/orders', { ...pendingOrder, payments: cashPayment }), 201);
+    assert.equal(paidPending.estado, 'pendiente');
+    assert.equal(paidPending.payments[0].cashSessionId, reopened.id);
   });
 });
 

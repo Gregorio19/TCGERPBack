@@ -13,7 +13,7 @@ import {
   orderIdParamDto,
 } from './dto.js';
 import { orderService } from './service.js';
-import { OrderStatus } from '@prisma/client';
+import { paymentsDto } from './payments.js';
 
 /** Router `/sales`: mismo dominio que órdenes + endpoints de analytics del contrato front. */
 export const salesApiRouter = new Hono();
@@ -28,6 +28,7 @@ const topCustomersQueryDto = z.object({
 
 const patchSaleStatusDto = z.object({
   estado: z.enum(['pendiente', 'completada', 'cancelada']),
+  payments: paymentsDto.optional(),
 });
 
 salesApiRouter.get('/stats', authJWT, rbacGuard, async (c) => {
@@ -109,10 +110,10 @@ salesApiRouter.patch(
   validateBody(patchSaleStatusDto),
   async (c) => {
     const { id } = (c as { get: (k: string) => unknown }).get('validatedParams') as { id: string };
-    const { estado } = (c as { get: (k: string) => unknown }).get('validatedBody') as z.infer<
+    const data = (c as { get: (k: string) => unknown }).get('validatedBody') as z.infer<
       typeof patchSaleStatusDto
     >;
-    const order = await orderService.update(id, { estado: estado as OrderStatus }, getAuthUser(c).userId);
+    const order = await orderService.update(id, data, getAuthUser(c).userId);
     return ok(c, mapOrder(order));
   }
 );

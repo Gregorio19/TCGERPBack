@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { db } from '../../lib/db.js';
 import { AppError, ErrorCodes } from '../../lib/errors.js';
 import { clpSchema, uuidSchema } from '../../lib/validation.js';
-import { lockOpenCashSession } from '../cash-sessions/service.js';
+import { lockOpenCashSessionForOutflow } from '../cash-sessions/service.js';
 import { applyStockChange } from '../inventory/stock.js';
 import { applyStoreCredit } from './store-credit.js';
 
@@ -40,7 +40,7 @@ export function createPurchase(customerId: string, userId: string, input: z.infe
     const branch = await tx.branch.findFirst({ where: { id: branchId, activa: true, deletedAt: null } });
     if (!branch) throw new AppError(ErrorCodes.BRANCH_NOT_FOUND, 'Sucursal no encontrada', 404);
     const cashSessionId = paymentMethod === 'efectivo'
-      ? await lockOpenCashSession(tx, branchId, userId, 'registrar una compra al cliente')
+      ? await lockOpenCashSessionForOutflow(tx, branchId, userId, total, 'registrar una compra al cliente')
       : undefined;
     const [customer] = await tx.$queryRaw<{ id: string }[]>`
       SELECT id FROM customers WHERE id = ${customerId} AND deleted_at IS NULL FOR NO KEY UPDATE

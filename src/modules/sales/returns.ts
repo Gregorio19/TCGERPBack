@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { db } from '../../lib/db.js';
 import { AppError, ErrorCodes } from '../../lib/errors.js';
 import { uuidSchema } from '../../lib/validation.js';
-import { lockOpenCashSession } from '../cash-sessions/service.js';
+import { lockOpenCashSessionForOutflow } from '../cash-sessions/service.js';
 import { applyStockChange } from '../inventory/stock.js';
 import { applyStoreCredit } from '../customers/store-credit.js';
 
@@ -45,8 +45,23 @@ export async function listReturns(orderId: string) {
   });
 }
 
-export function createReturn(orderId: string, userId: string, input: z.infer<typeof createReturnDto>) {
+export function createReturn(
+  orderId: string, userId: string, idempotencyKey: string, input: z.infer<typeof createReturnDto>
+) {
   return db.$transaction(async (tx) => {
+    // Serialize requests for the same key even if they target different orders.
+    await tx.$queryRaw`SELECT 1 FROM pg_advisory_xact_lock(hashtextextended(${idempotencyKey}, 0))`;
+    const existing = await tx.return.findUnique({
+      where: { idempotencyKey },
+      include: { items: true },
+    });
+    if (existing) {
+      if (existing.orderId !== orderId) {
+        throw new AppError(ErrorCodes.CONFLICT_STATE, 'Idempotency-Key ya usada en otra orden', 409);
+      }
+      return { result: existing, replayed: true };
+    }
+
     // Use the same order lock as order edits and serialize partial returns.
     await tx.$queryRaw`SELECT id FROM orders WHERE id = ${orderId} FOR NO KEY UPDATE`;
     const order = await tx.order.findFirst({
@@ -84,12 +99,12 @@ export function createReturn(orderId: string, userId: string, input: z.infer<typ
     const fullyReturned = order.items.every((item) => quantities.get(item.id) === item.cantidad);
     const branchId = order.sucursalId;
     const cashSessionId = input.refundMethod === 'efectivo'
-      ? await lockOpenCashSession(tx, branchId, userId, 'registrar una devolución')
+      ? await lockOpenCashSessionForOutflow(tx, branchId, userId, refundAmount, 'registrar una devolución')
       : undefined;
 
     const result = await tx.return.create({
       data: {
-        orderId, branchId, userId, cashSessionId, refundAmount,
+        orderId, idempotencyKey, branchId, userId, cashSessionId, refundAmount,
         reason: input.reason,
         refundMethod: input.refundMethod,
         items: { create: input.items },
@@ -117,6 +132,6 @@ export function createReturn(orderId: string, userId: string, input: z.infer<typ
       data: { estado: fullyReturned ? 'devuelta' : 'devuelta_parcial' },
     });
 
-    return result;
+    return { result, replayed: false };
   });
 }

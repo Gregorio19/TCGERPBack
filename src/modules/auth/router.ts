@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import type { HttpBindings } from '@hono/node-server';
 import { validateBody } from '../../lib/validation.js';
 import { z } from 'zod';
 import { db } from '../../lib/db.js';
@@ -10,7 +11,10 @@ import { getEffectivePermissionNamesForUserId } from '../../lib/user-permissions
 import { issueRefreshToken, consumeRefreshToken, revokeRefreshToken } from '../../lib/refresh-token.js';
 import { verifyLogin } from '../../lib/login-rate-limit.js';
 
-export const authRouter = new Hono<{ Variables: { validatedBody: unknown; user: JWTPayload } }>();
+export const authRouter = new Hono<{
+  Bindings: HttpBindings;
+  Variables: { validatedBody: unknown; user: JWTPayload };
+}>();
 
 const DUMMY_PASSWORD_HASH = '$2a$10$Atju59QNiuc9NUD7deFoKO6jBEYqfWcaKxfvFCeAj8PW7bGKR0PU6';
 
@@ -25,7 +29,10 @@ const refreshDto = z.object({
 
 authRouter.post('/login', validateBody(loginDto), async (c) => {
   const { username, password } = c.get('validatedBody') as z.infer<typeof loginDto>;
-  const ip = c.req.header('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+  const proxyIp = process.env.TRUST_PROXY === '1'
+    ? c.req.header('x-real-ip')?.trim() || c.req.header('x-forwarded-for')?.split(',').at(-1)?.trim()
+    : undefined;
+  const ip = proxyIp || c.env?.incoming?.socket?.remoteAddress || 'unknown';
   const user = await verifyLogin(ip, username, async () => {
     const candidate = await db.user.findUnique({
       where: { username },

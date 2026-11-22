@@ -93,6 +93,7 @@ export const updateOrderDto = z
     items: z.array(orderItemSchema).min(1).max(100).optional(),
     descuentoGeneral: clpSchema.optional(),
     costoEnvio: clpSchema.optional(),
+    payments: paymentsDto.optional(),
   })
   .strict();
 

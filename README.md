@@ -43,6 +43,17 @@ pnpm dev
 
 El servidor estará disponible en `http://localhost:3001`
 
+### IP del cliente para el inicio de sesión
+
+Por defecto, el límite de intentos usa la dirección IP del socket. Activa `TRUST_PROXY=1`
+solo cuando la API sea accesible exclusivamente a través de un proxy de confianza.
+Con esa opción, la API usa `X-Real-IP` o, si falta, la última entrada de `X-Forwarded-For`.
+Nginx debe sobrescribir `X-Real-IP` con la IP que observa en la conexión:
+
+```nginx
+proxy_set_header X-Real-IP $remote_addr;
+```
+
 ## 📁 Estructura del Proyecto
 
 ```

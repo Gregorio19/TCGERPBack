@@ -3,7 +3,7 @@ import { AppError, ErrorCodes } from '../../lib/errors.js';
 import { PaginationParams, buildPaginatedResponse } from '../../lib/pagination.js';
 import { Prisma, OrderStatus, OrderChannel, DocType } from '@prisma/client';
 import { applyStockChange, userBranchId } from '../inventory/stock.js';
-import { findAndLockOpenCashSession, lockOpenCashSession } from '../cash-sessions/service.js';
+import { lockOpenCashSession } from '../cash-sessions/service.js';
 import { applyStoreCredit } from '../customers/store-credit.js';
 import { preparePayments, type PaymentInput } from './payments.js';
 
@@ -114,7 +114,7 @@ type CreateOrder = {
 };
 
 type UpdateOrder = Partial<Pick<CreateOrder,
-  'estado' | 'canal' | 'tipoDocumento' | 'items' | 'descuentoGeneral' | 'costoEnvio'
+  'estado' | 'canal' | 'tipoDocumento' | 'items' | 'descuentoGeneral' | 'costoEnvio' | 'payments'
 >>;
 
 function orderItems(items: OrderItemInput[]) {
@@ -378,8 +378,8 @@ export const orderService = {
       if (products !== productIds.length) {
         throw new AppError(ErrorCodes.PRODUCT_NOT_FOUND, 'Uno o más productos no encontrados o inactivos', 404);
       }
-      const cashSessionId = data.estado === 'completada' && data.payments?.some(({ method }) => method === 'efectivo')
-        ? await findAndLockOpenCashSession(tx, data.sucursalId, vendedorId)
+      const cashSessionId = data.payments?.some(({ method }) => method === 'efectivo')
+        ? await lockOpenCashSession(tx, data.sucursalId, vendedorId)
         : undefined;
       return createOrder(tx, data, vendedorId, cashSessionId);
     });
@@ -429,10 +429,13 @@ export const orderService = {
         throw new AppError(ErrorCodes.ORDER_NOT_FOUND, `Orden con ID ${id} no encontrada`, 404);
       }
 
-      const { items, descuentoGeneral, costoEnvio, estado, ...fields } = data;
+      const { items, descuentoGeneral, costoEnvio, estado, payments, ...fields } = data;
       const changesTotal = items !== undefined || descuentoGeneral !== undefined || costoEnvio !== undefined;
       const hasReturns = existing._count.returns > 0;
-      if (estado && estado !== existing.estado && (hasReturns || !validateStateTransition(existing.estado, estado))) {
+      const completing = estado === 'completada' && existing.estado !== 'completada';
+      const completingUnpaidPending = completing && existing.estado === 'pendiente' && payments && !existing.payments.length;
+      if (estado && estado !== existing.estado
+        && (hasReturns || (!completingUnpaidPending && !validateStateTransition(existing.estado, estado)))) {
         throw new AppError(
           ErrorCodes.INVALID_ORDER_STATE,
           `No se puede cambiar el estado de '${existing.estado}' a '${estado}'`,
@@ -441,6 +444,9 @@ export const orderService = {
       }
       if (changesTotal && (hasReturns || existing.estado === 'completada')) {
         throw new AppError(ErrorCodes.ORDER_ALREADY_PROCESSED, 'No se puede modificar una orden ya procesada', 422);
+      }
+      if (payments && (!completing || existing.payments.length)) {
+        throw new AppError(ErrorCodes.INVALID_ORDER_STATE, 'Solo se pueden agregar pagos al completar una orden sin pagos', 422);
       }
 
       const totals = changesTotal ? calculateOrderTotals(
@@ -452,21 +458,39 @@ export const orderService = {
         throw new AppError(ErrorCodes.BAD_REQUEST, 'La suma de los pagos debe coincidir con el total de la orden', 400);
       }
 
-      if (estado === 'completada' && existing.estado !== 'completada') {
+      const cashSessionId = payments?.some(({ method }) => method === 'efectivo')
+        ? await lockOpenCashSession(tx, existing.sucursalId, userId)
+        : undefined;
+      const payment = payments && preparePayments(payments, totals?.total ?? existing.total, cashSessionId);
+      const storeCredit = payment?.applied
+        .filter(({ method }) => method === 'credito_tienda')
+        .reduce((sum, { amount }) => sum + amount, 0) ?? 0;
+      if (storeCredit > 0) {
+        await applyStoreCredit(tx, {
+          customerId: existing.clienteId, amount: -storeCredit, reason: `Pago orden ${existing.numero}`,
+          refType: 'order', refId: id, userId,
+        });
+      }
+      if (completing) {
         await deductOrderStock(tx, { ...existing, items: items ?? existing.items }, userId);
       }
       if (estado === 'cancelada' && existing.estado !== 'cancelada') {
         await restoreOrderCredit(tx, existing, userId);
       }
       if (items) await tx.orderItem.deleteMany({ where: { orderId: id } });
-      return tx.order.update({
+      const result = await tx.order.update({
         where: { id },
         data: {
           ...fields, ...totals, estado, descuentoGeneral, costoEnvio,
           items: items && { create: orderItems(items) },
+          payments: payment && { create: payment.applied },
         },
         include: orderDetail,
       });
+      return {
+        ...result,
+        ...(payment && { amountTendered: payment.amountTendered, change: payment.change }),
+      };
     });
   },
 

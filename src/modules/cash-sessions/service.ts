@@ -1,19 +1,7 @@
 import { PaymentMethod, Prisma } from '@prisma/client';
 import { db } from '../../lib/db.js';
 import { AppError, ErrorCodes } from '../../lib/errors.js';
-
-export async function findAndLockOpenCashSession(
-  tx: Prisma.TransactionClient,
-  branchId: string,
-  userId: string
-) {
-  const [session] = await tx.$queryRaw<{ id: string }[]>`
-    SELECT id FROM cash_sessions
-    WHERE branch_id = ${branchId} AND user_id = ${userId} AND status = 'abierta'
-    FOR NO KEY UPDATE
-  `;
-  return session?.id;
-}
+import { getEffectivePermissionNamesForUserId } from '../../lib/user-permissions.js';
 
 export async function lockOpenCashSession(
   tx: Prisma.TransactionClient,
@@ -21,9 +9,13 @@ export async function lockOpenCashSession(
   userId: string,
   operation = 'vender'
 ) {
-  const id = await findAndLockOpenCashSession(tx, branchId, userId);
-  if (!id) throw new AppError(ErrorCodes.CONFLICT_STATE, `Debes abrir caja antes de ${operation}`, 409);
-  return id;
+  const [session] = await tx.$queryRaw<{ id: string }[]>`
+    SELECT id FROM cash_sessions
+    WHERE branch_id = ${branchId} AND user_id = ${userId} AND status = 'abierta'
+    FOR NO KEY UPDATE
+  `;
+  if (!session) throw new AppError(ErrorCodes.CONFLICT_STATE, `Debes abrir caja antes de ${operation}`, 409);
+  return session.id;
 }
 
 async function requireSession(tx: Prisma.TransactionClient, id: string) {
@@ -52,6 +44,22 @@ function expectedCash(openingAmount: number, activity: Awaited<ReturnType<typeof
   return openingAmount + activity.cashSales - activity.cashRefunds - activity.cashCustomerPurchases;
 }
 
+export async function lockOpenCashSessionForOutflow(
+  tx: Prisma.TransactionClient,
+  branchId: string,
+  userId: string,
+  amount: number,
+  operation: string,
+) {
+  const id = await lockOpenCashSession(tx, branchId, userId, operation);
+  const session = await requireSession(tx, id);
+  const available = expectedCash(session.openingAmount, await cashActivity(tx, id));
+  if (amount > available) {
+    throw new AppError(ErrorCodes.CONFLICT_STATE, `Efectivo insuficiente en caja (disponible $${available})`, 409);
+  }
+  return id;
+}
+
 export const cashSessionService = {
   async open(branchId: string, userId: string, openingAmount: number) {
     const branch = await db.branch.findFirst({ where: { id: branchId, deletedAt: null, activa: true } });
@@ -76,6 +84,10 @@ export const cashSessionService = {
       // Cash operations hold this same lock until their transactions commit.
       await tx.$queryRaw`SELECT id FROM cash_sessions WHERE id = ${id} FOR NO KEY UPDATE`;
       const session = await requireSession(tx, id);
+      if (session.userId !== closedById
+        && !(await getEffectivePermissionNamesForUserId(closedById, tx)).includes('admin.view')) {
+        throw new AppError(ErrorCodes.FORBIDDEN, 'Solo quien abrió la caja o un supervisor puede cerrarla', 403);
+      }
       if (session.status === 'cerrada') {
         throw new AppError(ErrorCodes.CONFLICT_STATE, 'La caja ya está cerrada', 409);
       }
