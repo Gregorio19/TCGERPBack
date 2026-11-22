@@ -131,13 +131,13 @@ it('POS: exige caja, registra pagos y stock de forma atómica y permite cuadrar 
     assert.deepEqual(await snapshot(), before);
   });
 
-  await t.test('rechaza la suma incorrecta y el crédito en tienda', async () => {
+  await t.test('rechaza la suma incorrecta y el crédito en tienda insuficiente', async () => {
     const before = await snapshot();
     await expectJson(await post(salePath, { ...sale, payments: [{ method: 'debito', amount: 2379 }] }), 400);
     const error = await expectJson(await post(salePath, {
       ...sale, payments: [{ method: 'credito_tienda', amount: 2380 }],
-    }), 400);
-    assert.equal(error.error.message, 'Crédito en tienda aún no disponible');
+    }), 409);
+    assert.equal(error.error.message, 'Crédito en tienda insuficiente');
     assert.deepEqual(await snapshot(), before);
   });
 

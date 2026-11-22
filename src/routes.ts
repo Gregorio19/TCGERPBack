@@ -18,6 +18,9 @@ import { forecastRouter } from './modules/forecast/router.js';
 import { posRouter } from './modules/pos/router.js';
 import { cashSessionsRouter } from './modules/cash-sessions/router.js';
 
+import { alertsRouter } from './modules/inventory/alerts-router.js';
+import { indicadoresRouter } from './modules/indicadores/router.js';
+
 export const routes = new Hono();
 
 // Autenticación
@@ -41,3 +44,5 @@ routes.route('/reports', reportsRouter);
 routes.route('/forecast', forecastRouter);
 routes.route('/pos', posRouter);
 routes.route('/cash-sessions', cashSessionsRouter);
+routes.route('/alerts', alertsRouter);
+routes.route('/indicadores', indicadoresRouter);

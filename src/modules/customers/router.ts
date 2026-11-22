@@ -1,5 +1,5 @@
 import { Hono, type Context } from 'hono';
-import { authJWT } from '../../middlewares/auth-jwt.js';
+import { authJWT, getAuthUser } from '../../middlewares/auth-jwt.js';
 import { rbacGuard } from '../../middlewares/rbac-guard.js';
 import { validateBody, validateQuery, validateParams } from '../../lib/validation.js';
 import {
@@ -16,6 +16,8 @@ import {
   customerVisitAttachmentIdParamDto,
   listCustomerVisitAttachmentsQueryDto,
 } from './dto.js';
+import { createPurchase, createPurchaseDto, listPurchases } from './purchases.js';
+import { getStoreCredit } from './store-credit.js';
 import { customerService } from './service.js';
 import { customerAttachmentService } from './attachments-service.js';
 import { customerVisitAttachmentService } from './visit-attachments-service.js';
@@ -452,3 +454,22 @@ customersRouter.get(
   }
 );
 
+
+customersRouter.get('/:id/store-credit', authJWT, rbacGuard, validateParams(customerIdParamDto), async (c) => {
+  const { id } = (c as Context).get('validatedParams') as z.infer<typeof customerIdParamDto>;
+  return ok(c, await getStoreCredit(id));
+});
+
+customersRouter.get('/:id/purchases', authJWT, rbacGuard, validateParams(customerIdParamDto), async (c) => {
+  const { id } = (c as Context).get('validatedParams') as z.infer<typeof customerIdParamDto>;
+  return ok(c, await listPurchases(id));
+});
+
+customersRouter.post(
+  '/:id/purchases', authJWT, rbacGuard, validateParams(customerIdParamDto), validateBody(createPurchaseDto),
+  async (c) => {
+    const { id } = (c as Context).get('validatedParams') as z.infer<typeof customerIdParamDto>;
+    const input = (c as Context).get('validatedBody') as z.infer<typeof createPurchaseDto>;
+    return created(c, await createPurchase(id, getAuthUser(c).userId, input));
+  }
+);

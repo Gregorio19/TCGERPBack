@@ -85,6 +85,7 @@ enum OrderStatus {
   cancelada
   reembolsada
   devuelta
+  devuelta_parcial
 }
 
 enum OrderChannel {
@@ -194,6 +195,7 @@ model Product {
   precioCompra    Int?         @map("precio_compra")
   iva             Int          @default(19)
   stock           Int          @default(0)
+  stockMinimo     Int          @default(0) @map("stock_minimo")
   categoria       String
   imagen          String?      @db.Text
   imagenes        String[]     @default([])
@@ -207,6 +209,7 @@ model Product {
   orderItems      OrderItem[]
   receptionItems  ReceptionItem[]
   transferItems   TransferItem[]
+  customerPurchaseItems CustomerPurchaseItem[]
   stockMovements  StockMovement[]
 
   @@index([sku])
@@ -255,6 +258,8 @@ model Branch {
   employees       Employee[]
   stockMovements  StockMovement[]
   cashSessions    CashSession[]
+  returns         Return[]
+  customerPurchases CustomerPurchase[]
 
   @@map("branches")
 }
@@ -269,6 +274,7 @@ model Customer {
   direccion       Json?        // JSON object
   canal           String?     @db.VarChar(100)
   estado          CustomerStatus @default(activo)
+  creditoTienda   Int         @default(0) @map("credito_tienda")
   fechaRegistro   DateTime    @default(now()) @map("fecha_registro")
   createdAt       DateTime    @default(now()) @map("created_at")
   updatedAt       DateTime    @updatedAt @map("updated_at")
@@ -278,6 +284,8 @@ model Customer {
   orders          Order[]
   visits          CustomerVisit[]
   attachments     CustomerAttachment[]
+  purchases       CustomerPurchase[]
+  storeCreditMovements StoreCreditMovement[]
 
   @@index([email])
   @@index([rut])
@@ -309,6 +317,7 @@ model CustomerVisit {
   customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
   usuario  User     @relation(fields: [usuarioId], references: [id], onDelete: Restrict)
   attachments CustomerVisitAttachment[]
+  purchase CustomerPurchase?
 
   @@index([customerId])
   @@index([fecha])
@@ -381,6 +390,7 @@ model Order {
   items               OrderItem[]
   vendedor            User?       @relation(fields: [vendedorId], references: [id], onDelete: SetNull)
   payments            Payment[]
+  returns             Return[]
 
   @@index([clienteId])
   @@index([vendedorId])
@@ -403,6 +413,7 @@ model OrderItem {
 
   order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
   product     Product  @relation(fields: [productId], references: [id])
+  returnItems ReturnItem[]
 
   @@index([orderId])
   @@index([productId])
@@ -850,6 +861,10 @@ model User {
   customerVisits CustomerVisit[]
   customerAttachments CustomerAttachment[]
   customerVisitAttachments CustomerVisitAttachment[]
+  returns Return[]
+  customerPurchases CustomerPurchase[]
+  storeCreditMovements StoreCreditMovement[]
+  auditLogs AuditLog[]
 
   @@index([username])
   @@index([email])
@@ -1059,8 +1074,136 @@ model CashSession {
   closedBy User?     @relation("CashSessionClosedBy", fields: [closedById], references: [id])
   payments Payment[]
 
+  returns Return[]
+  customerPurchases CustomerPurchase[]
+
   // El índice único parcial para cajas abiertas se define en la migración.
   @@index([branchId, openedAt])
   @@index([openedAt])
   @@map("cash_sessions")
+}
+
+model Return {
+  id            String        @id @default(uuid())
+  orderId       String        @map("order_id")
+  reason        String
+  refundMethod  PaymentMethod @map("refund_method")
+  refundAmount  Int           @map("refund_amount")
+  userId        String        @map("user_id")
+  cashSessionId String?       @map("cash_session_id")
+  branchId      String        @map("branch_id")
+  createdAt     DateTime      @default(now()) @map("created_at")
+
+  order       Order        @relation(fields: [orderId], references: [id])
+  user        User         @relation(fields: [userId], references: [id])
+  cashSession CashSession? @relation(fields: [cashSessionId], references: [id], onDelete: Restrict)
+  branch      Branch       @relation(fields: [branchId], references: [id])
+  items       ReturnItem[]
+
+  @@index([orderId, createdAt])
+  @@index([cashSessionId])
+  @@index([branchId, createdAt])
+  @@index([createdAt])
+  @@map("returns")
+}
+
+model ReturnItem {
+  id          String @id @default(uuid())
+  returnId    String @map("return_id")
+  orderItemId String @map("order_item_id")
+  quantity    Int
+
+  return    Return    @relation(fields: [returnId], references: [id])
+  orderItem OrderItem @relation(fields: [orderItemId], references: [id])
+
+  @@unique([returnId, orderItemId])
+  @@index([orderItemId])
+  @@map("return_items")
+}
+
+enum StoreCreditRefType {
+  order
+  return
+  purchase
+}
+
+model StoreCreditMovement {
+  id         String             @id @default(uuid())
+  customerId String             @map("customer_id")
+  amount     Int
+  reason     String
+  refType    StoreCreditRefType @map("ref_type")
+  refId      String             @map("ref_id")
+  userId     String             @map("user_id")
+  createdAt  DateTime           @default(now()) @map("created_at")
+
+  customer Customer @relation(fields: [customerId], references: [id])
+  user     User     @relation(fields: [userId], references: [id])
+
+  @@index([customerId, createdAt])
+  @@index([refType, refId])
+  @@map("store_credit_movements")
+}
+
+enum CustomerPurchasePaymentMethod {
+  efectivo
+  credito_tienda
+  transferencia
+}
+
+model CustomerPurchase {
+  id            String                        @id @default(uuid())
+  customerId    String                        @map("customer_id")
+  branchId      String                        @map("branch_id")
+  total         Int
+  paymentMethod CustomerPurchasePaymentMethod @map("payment_method")
+  notes         String?
+  userId        String                        @map("user_id")
+  cashSessionId String?                       @map("cash_session_id")
+  visitId       String                        @unique @map("visit_id")
+  createdAt     DateTime                      @default(now()) @map("created_at")
+
+  customer    Customer               @relation(fields: [customerId], references: [id])
+  branch      Branch                 @relation(fields: [branchId], references: [id])
+  user        User                   @relation(fields: [userId], references: [id])
+  cashSession CashSession?           @relation(fields: [cashSessionId], references: [id], onDelete: Restrict)
+  visit       CustomerVisit          @relation(fields: [visitId], references: [id])
+  items       CustomerPurchaseItem[]
+
+  @@index([customerId, createdAt])
+  @@index([cashSessionId])
+  @@map("customer_purchases")
+}
+
+model CustomerPurchaseItem {
+  id         String     @id @default(uuid())
+  purchaseId String     @map("purchase_id")
+  productId  Int        @map("product_id")
+  quantity   Int
+  unitPrice  Int        @map("unit_price")
+  condition  Condition?
+
+  purchase CustomerPurchase @relation(fields: [purchaseId], references: [id])
+  product  Product          @relation(fields: [productId], references: [id])
+
+  @@index([purchaseId])
+  @@map("customer_purchase_items")
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?  @map("user_id")
+  method    String
+  path      String
+  status    Int
+  entity    String?
+  entityId  String?  @map("entity_id")
+  ip        String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([userId, createdAt])
+  @@map("audit_logs")
 }

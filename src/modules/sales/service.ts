@@ -3,7 +3,8 @@ import { AppError, ErrorCodes } from '../../lib/errors.js';
 import { PaginationParams, buildPaginatedResponse } from '../../lib/pagination.js';
 import { Prisma, OrderStatus, OrderChannel, DocType } from '@prisma/client';
 import { applyStockChange, userBranchId } from '../inventory/stock.js';
-import { lockOpenCashSession } from '../cash-sessions/service.js';
+import { findAndLockOpenCashSession, lockOpenCashSession } from '../cash-sessions/service.js';
+import { applyStoreCredit } from '../customers/store-credit.js';
 import { preparePayments, type PaymentInput } from './payments.js';
 
 // Función para generar número de orden único
@@ -63,6 +64,7 @@ function validateStateTransition(currentState: OrderStatus, newState: OrderStatu
     cancelada: [], // Estado final
     reembolsada: [], // Estado final
     devuelta: ['reembolsada'],
+    devuelta_parcial: [],
   };
 
   return validTransitions[currentState]?.includes(newState) ?? false;
@@ -163,6 +165,12 @@ async function createOrder(
     throw new AppError(ErrorCodes.BAD_REQUEST, 'Total de orden fuera de rango', 400);
   }
   const payment = data.payments && preparePayments(data.payments, totals.total, cashSessionId);
+  const storeCredit = payment?.applied
+    .filter(({ method }) => method === 'credito_tienda')
+    .reduce((sum, { amount }) => sum + amount, 0) ?? 0;
+  if (storeCredit && ['cancelada', 'reembolsada', 'devuelta'].includes(data.estado ?? 'pendiente')) {
+    throw new AppError(ErrorCodes.INVALID_ORDER_STATE, 'La orden no admite pagos con crédito en tienda', 422);
+  }
   const numero = await generateOrderNumber(tx);
 
   const order = await tx.order.create({
@@ -183,12 +191,33 @@ async function createOrder(
     include: { items: true },
   });
 
+  if (storeCredit > 0) {
+    await applyStoreCredit(tx, {
+      customerId: cliente.id, amount: -storeCredit, reason: `Pago orden ${order.numero}`,
+      refType: 'order', refId: order.id, userId: vendedorId,
+    });
+  }
   if (order.estado === 'completada') await deductOrderStock(tx, order, vendedorId);
   const result = await tx.order.findUniqueOrThrow({ where: { id: order.id }, include: orderDetail });
   return {
     ...result,
     ...(payment && { amountTendered: payment.amountTendered, change: payment.change }),
   };
+}
+
+async function restoreOrderCredit(
+  tx: Prisma.TransactionClient,
+  order: { id: string; clienteId: string; numero: string; payments: { method: string; amount: number }[] },
+  userId: string
+) {
+  const amount = order.payments.filter((payment) => payment.method === 'credito_tienda')
+    .reduce((sum, payment) => sum + payment.amount, 0);
+  if (amount > 0) {
+    await applyStoreCredit(tx, {
+      customerId: order.clienteId, amount, reason: `Anulación orden ${order.numero}`,
+      refType: 'order', refId: order.id, userId,
+    });
+  }
 }
 
 export const orderService = {
@@ -349,7 +378,10 @@ export const orderService = {
       if (products !== productIds.length) {
         throw new AppError(ErrorCodes.PRODUCT_NOT_FOUND, 'Uno o más productos no encontrados o inactivos', 404);
       }
-      return createOrder(tx, data, vendedorId);
+      const cashSessionId = data.estado === 'completada' && data.payments?.some(({ method }) => method === 'efectivo')
+        ? await findAndLockOpenCashSession(tx, data.sucursalId, vendedorId)
+        : undefined;
+      return createOrder(tx, data, vendedorId, cashSessionId);
     });
   },
 
@@ -391,7 +423,7 @@ export const orderService = {
       await tx.$queryRaw`SELECT id FROM orders WHERE id = ${id} FOR NO KEY UPDATE`;
       const existing = await tx.order.findFirst({
         where: { id, deletedAt: null },
-        include: { items: true, payments: true },
+        include: { items: true, payments: true, _count: { select: { returns: true } } },
       });
       if (!existing) {
         throw new AppError(ErrorCodes.ORDER_NOT_FOUND, `Orden con ID ${id} no encontrada`, 404);
@@ -399,14 +431,15 @@ export const orderService = {
 
       const { items, descuentoGeneral, costoEnvio, estado, ...fields } = data;
       const changesTotal = items !== undefined || descuentoGeneral !== undefined || costoEnvio !== undefined;
-      if (estado && estado !== existing.estado && !validateStateTransition(existing.estado, estado)) {
+      const hasReturns = existing._count.returns > 0;
+      if (estado && estado !== existing.estado && (hasReturns || !validateStateTransition(existing.estado, estado))) {
         throw new AppError(
           ErrorCodes.INVALID_ORDER_STATE,
           `No se puede cambiar el estado de '${existing.estado}' a '${estado}'`,
           422
         );
       }
-      if (changesTotal && existing.estado === 'completada') {
+      if (changesTotal && (hasReturns || existing.estado === 'completada')) {
         throw new AppError(ErrorCodes.ORDER_ALREADY_PROCESSED, 'No se puede modificar una orden ya procesada', 422);
       }
 
@@ -422,6 +455,9 @@ export const orderService = {
       if (estado === 'completada' && existing.estado !== 'completada') {
         await deductOrderStock(tx, { ...existing, items: items ?? existing.items }, userId);
       }
+      if (estado === 'cancelada' && existing.estado !== 'cancelada') {
+        await restoreOrderCredit(tx, existing, userId);
+      }
       if (items) await tx.orderItem.deleteMany({ where: { orderId: id } });
       return tx.order.update({
         where: { id },
@@ -434,14 +470,18 @@ export const orderService = {
     });
   },
 
-  delete(id: string) {
+  delete(id: string, userId: string) {
     return db.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM orders WHERE id = ${id} FOR NO KEY UPDATE`;
-      const order = await tx.order.findFirst({ where: { id, deletedAt: null } });
+      const order = await tx.order.findFirst({
+        where: { id, deletedAt: null },
+        include: { payments: true, _count: { select: { returns: true } } },
+      });
       if (!order) throw new AppError(ErrorCodes.ORDER_NOT_FOUND, `Orden con ID ${id} no encontrada`, 404);
-      if (['completada', 'cancelada', 'reembolsada'].includes(order.estado)) {
+      if (order._count.returns > 0 || ['completada', 'cancelada', 'reembolsada'].includes(order.estado)) {
         throw new AppError(ErrorCodes.ORDER_ALREADY_PROCESSED, 'No se puede eliminar una orden ya procesada', 422);
       }
+      await restoreOrderCredit(tx, order, userId);
       await tx.order.update({ where: { id }, data: { deletedAt: new Date() } });
     });
   },

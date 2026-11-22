@@ -1,4 +1,8 @@
-import { Hono } from 'hono';
+import { z } from 'zod';
+import { validateQuery } from '../../lib/validation.js';
+import { branchFilterDto } from '../inventory/alerts.js';
+import { getKpis } from './kpis.js';
+import { Hono, type Context } from 'hono';
 import { authJWT } from '../../middlewares/auth-jwt.js';
 import { rbacGuard } from '../../middlewares/rbac-guard.js';
 import { ok } from '../../lib/responses.js';
@@ -26,4 +30,9 @@ dashboardRouter.get('/charts', authJWT, rbacGuard, async (c) => {
     estadoStock,
     tendencias,
   });
+});
+
+dashboardRouter.get('/kpis', authJWT, rbacGuard, validateQuery(branchFilterDto), async (c) => {
+  const { branchId } = (c as Context).get('validatedQuery') as z.infer<typeof branchFilterDto>;
+  return ok(c, await getKpis(branchId));
 });

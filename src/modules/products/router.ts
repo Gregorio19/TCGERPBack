@@ -1,3 +1,4 @@
+import { legacyLowStock } from '../inventory/alerts-router.js';
 import { Hono } from 'hono';
 import { authJWT, getAuthUser } from '../../middlewares/auth-jwt.js';
 import { rbacGuard } from '../../middlewares/rbac-guard.js';
@@ -120,11 +121,7 @@ productsRouter.get('/categories', authJWT, rbacGuard, async (c) => {
 });
 
 // Productos con stock bajo
-productsRouter.get('/low-stock', authJWT, rbacGuard, async (c) => {
-  const threshold = parseInt(c.req.query('threshold') || '10', 10);
-  const products = await productService.getLowStock(threshold);
-  return ok(c, products.map(mapProduct));
-});
+productsRouter.get('/low-stock', authJWT, rbacGuard, legacyLowStock);
 
 // Obtener producto por ID
 productsRouter.get(

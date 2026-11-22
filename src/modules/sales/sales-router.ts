@@ -119,6 +119,6 @@ salesApiRouter.patch(
 
 salesApiRouter.delete('/:id', authJWT, rbacGuard, validateParams(orderIdParamDto), async (c) => {
   const { id } = (c as { get: (k: string) => unknown }).get('validatedParams') as { id: string };
-  await orderService.delete(id);
+  await orderService.delete(id, getAuthUser(c).userId);
   return noContent(c);
 });

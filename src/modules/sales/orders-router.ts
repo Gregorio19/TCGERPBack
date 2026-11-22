@@ -1,4 +1,4 @@
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { authJWT, getAuthUser } from '../../middlewares/auth-jwt.js';
 import { rbacGuard } from '../../middlewares/rbac-guard.js';
 import { validateBody, validateQuery, validateParams } from '../../lib/validation.js';
@@ -9,6 +9,7 @@ import {
   orderIdParamDto,
 } from './dto.js';
 import { orderService } from './service.js';
+import { createReturn, createReturnDto, listReturns } from './returns.js';
 import { ok, created, noContent } from '../../lib/responses.js';
 import { parsePagination } from '../../lib/pagination.js';
 import { mapOrder } from '../../lib/mapper.js';
@@ -104,7 +105,7 @@ ordersRouter.delete(
   validateParams(orderIdParamDto),
   async (c) => {
     const { id } = (c as any).get('validatedParams') as { id: string };
-    await orderService.delete(id);
+    await orderService.delete(id, getAuthUser(c).userId);
     return noContent(c);
   }
 );
@@ -122,3 +123,17 @@ ordersRouter.get(
   }
 );
 
+
+ordersRouter.get('/:id/returns', authJWT, rbacGuard, validateParams(orderIdParamDto), async (c) => {
+  const { id } = (c as Context).get('validatedParams') as z.infer<typeof orderIdParamDto>;
+  return ok(c, await listReturns(id));
+});
+
+ordersRouter.post(
+  '/:id/returns', authJWT, rbacGuard, validateParams(orderIdParamDto), validateBody(createReturnDto),
+  async (c) => {
+    const { id } = (c as Context).get('validatedParams') as z.infer<typeof orderIdParamDto>;
+    const input = (c as Context).get('validatedBody') as z.infer<typeof createReturnDto>;
+    return created(c, await createReturn(id, getAuthUser(c).userId, input));
+  }
+);

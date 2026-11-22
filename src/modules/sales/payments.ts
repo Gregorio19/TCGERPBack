@@ -16,9 +16,6 @@ export function preparePayments(payments: PaymentInput[], total: number, cashSes
   let amountTendered = 0;
   let nonCash = 0;
   for (const payment of payments) {
-    if (payment.method === 'credito_tienda') {
-      throw new AppError(ErrorCodes.INVALID_PAYMENT_METHOD, 'Crédito en tienda aún no disponible', 400);
-    }
     if (payment.method === 'efectivo') amountTendered += payment.amount;
     else nonCash += payment.amount;
   }

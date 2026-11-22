@@ -25,7 +25,7 @@ export async function applyStockChange(tx: Prisma.TransactionClient, change: Sto
 
   // Serialize all branches of the same product until its cached total is updated.
   const [product] = await tx.$queryRaw<{ nombre: string }[]>`
-    SELECT nombre FROM products WHERE id = ${productId} AND deleted_at IS NULL
+    SELECT nombre FROM products WHERE id = ${productId} AND (deleted_at IS NULL OR ${type} = 'devolucion')
     FOR NO KEY UPDATE
   `;
   if (!product) {
@@ -44,6 +44,11 @@ export async function applyStockChange(tx: Prisma.TransactionClient, change: Sto
     }
     const { _sum } = await tx.stockByBranch.aggregate({ where: { productId }, _sum: { cantidad: true } });
     quantity = change.totalBalance - (_sum.cantidad ?? 0);
+  }
+
+  const maxStock = 2147483647;
+  if (quantity > maxStock - (current?.cantidad ?? 0)) {
+    throw new AppError(ErrorCodes.INVALID_STOCK, 'Stock fuera de rango', 422);
   }
 
   let stock = current;
@@ -68,9 +73,13 @@ export async function applyStockChange(tx: Prisma.TransactionClient, change: Sto
     where: { productId },
     _sum: { cantidad: true },
   });
+  const totalStock = _sum.cantidad ?? 0;
+  if (totalStock > maxStock) {
+    throw new AppError(ErrorCodes.INVALID_STOCK, 'Stock fuera de rango', 422);
+  }
   const updatedProduct = await tx.product.update({
     where: { id: productId },
-    data: { stock: _sum.cantidad ?? 0 },
+    data: { stock: totalStock },
   });
   if (quantity !== 0) {
     await tx.stockMovement.create({

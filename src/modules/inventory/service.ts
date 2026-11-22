@@ -376,22 +376,6 @@ export const inventoryService = {
     return filteredAlerts;
   },
 
-  async getLowStock(threshold: number = 10) {
-    return db.product.findMany({
-      where: {
-        activo: true,
-        deletedAt: null,
-        stock: {
-          lte: threshold,
-          gt: 0,
-        },
-      },
-      orderBy: {
-        stock: 'asc',
-      },
-    });
-  },
-
   async getOutOfStock() {
     return db.product.findMany({
       where: {

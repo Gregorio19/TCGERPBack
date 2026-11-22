@@ -30,6 +30,8 @@ export const routePermissions: ReadonlyMap<string, RoutePermission> = new Map<st
   ['GET /api/inventory/:id', 'inventory.view'],
   ['PUT /api/inventory/:id', 'inventory.edit'],
 
+  ['GET /api/alerts/stock', 'inventory.view'],
+
   // sales
   ['GET /api/sales/stats', 'sales.view'],
   ['GET /api/sales/monthly', 'sales.view'],
@@ -57,6 +59,9 @@ export const routePermissions: ReadonlyMap<string, RoutePermission> = new Map<st
   ['DELETE /api/orders/:id', 'sales.delete'],
   ['GET /api/orders/:id/timeline', 'sales.view'],
 
+  ['GET /api/orders/:id/returns', 'sales.view'],
+  ['POST /api/orders/:id/returns', 'sales.edit'],
+
   // customers
   ['GET /api/customers', 'customers.view'],
   ['POST /api/customers', 'customers.create'],
@@ -76,6 +81,10 @@ export const routePermissions: ReadonlyMap<string, RoutePermission> = new Map<st
   ['DELETE /api/customers/:id', 'customers.delete'],
   ['GET /api/customers/:id/orders', 'customers.view'],
   ['GET /api/customers/:id/stats', 'customers.view'],
+
+  ['GET /api/customers/:id/store-credit', 'customers.view'],
+  ['GET /api/customers/:id/purchases', 'customers.view'],
+  ['POST /api/customers/:id/purchases', 'customers.edit'],
 
   // accounting
   ['GET /api/accounting/accounts/tree', 'accounting.view'],
@@ -144,6 +153,7 @@ export const routePermissions: ReadonlyMap<string, RoutePermission> = new Map<st
   ['PUT /api/hr/parametros/calculo', 'hr.edit'],
 
   // admin
+  ['GET /api/admin/audit', 'admin.view'],
   ['GET /api/admin/stats', 'admin.view'],
   ['GET /api/admin/users', 'admin.users'],
   ['POST /api/admin/users', 'admin.users'],
@@ -195,6 +205,8 @@ export const routePermissions: ReadonlyMap<string, RoutePermission> = new Map<st
   ['DELETE /api/proveedores/:id', 'inventory.edit'],
 
   // dashboard
+  ['GET /api/dashboard/kpis', 'dashboard.view'],
+  ['GET /api/indicadores', AUTHENTICATED_ONLY],
   ['GET /api/dashboard/stats', 'dashboard.view'],
   ['GET /api/dashboard/charts', 'dashboard.view'],
 

@@ -237,6 +237,7 @@ export const productService = {
           precio: cleanData.precio,
           precioCompra: cleanData.precio_compra,
           iva: cleanData.iva || 19,
+          stockMinimo: cleanData.stockMinimo,
           categoria: cleanData.categoria,
           imagen: cleanData.imagen,
           imagenes: cleanData.imagenes || [],
@@ -327,6 +328,7 @@ export const productService = {
           ...(cleanData.precio !== undefined && { precio: cleanData.precio }),
           ...(cleanData.precio_compra !== undefined && { precioCompra: cleanData.precio_compra }),
           ...(cleanData.iva !== undefined && { iva: cleanData.iva }),
+          stockMinimo: cleanData.stockMinimo,
           ...(cleanData.categoria !== undefined && { categoria: cleanData.categoria }),
           ...(cleanData.imagen !== undefined && { imagen: cleanData.imagen }),
           ...(cleanData.imagenes !== undefined && { imagenes: cleanData.imagenes }),
@@ -388,21 +390,6 @@ export const productService = {
     });
 
     return categories.map((c) => c.categoria);
-  },
-
-  async getLowStock(threshold: number = 10) {
-    return db.product.findMany({
-      where: {
-        activo: true,
-        deletedAt: null,
-        stock: {
-          lte: threshold,
-        },
-      },
-      orderBy: {
-        stock: 'asc',
-      },
-    });
   },
 
   async getStats() {

@@ -1,3 +1,4 @@
+import { legacyLowStock } from './alerts-router.js';
 import { Hono, type Context } from 'hono';
 import { authJWT, getAuthUser } from '../../middlewares/auth-jwt.js';
 import { rbacGuard } from '../../middlewares/rbac-guard.js';
@@ -95,11 +96,7 @@ inventoryRouter.get(
 );
 
 // Productos con stock bajo
-inventoryRouter.get('/low-stock', authJWT, rbacGuard, async (c) => {
-  const threshold = parseInt(c.req.query('threshold') || '10', 10);
-  const products = await inventoryService.getLowStock(threshold);
-  return ok(c, products.map(mapProduct));
-});
+inventoryRouter.get('/low-stock', authJWT, rbacGuard, legacyLowStock);
 
 // Productos sin stock
 inventoryRouter.get('/out-of-stock', authJWT, rbacGuard, async (c) => {

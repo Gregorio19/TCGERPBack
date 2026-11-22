@@ -1,5 +1,8 @@
 import { db } from '../../lib/db.js';
 import { OrderStatus, Prisma } from '@prisma/client';
+import { STOCK_MINIMO_REF } from '../inventory/alerts.js';
+
+export { STOCK_MINIMO_REF } from '../inventory/alerts.js';
 
 /** Órdenes que cuentan como venta (excluye canceladas / reembolsadas / devueltas). */
 const EXCLUDED_STATUSES: OrderStatus[] = [
@@ -7,9 +10,6 @@ const EXCLUDED_STATUSES: OrderStatus[] = [
   OrderStatus.reembolsada,
   OrderStatus.devuelta,
 ];
-
-/** Umbral “bajo stock” y `stockMinimo` en gráficos (el modelo Product no tiene mínimo). */
-export const STOCK_MINIMO_REF = 5;
 
 const POPULAR_LOOKBACK_DAYS = 90;
 const RECENT_ORDERS_LIMIT = 10;

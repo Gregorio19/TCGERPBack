@@ -1,5 +1,6 @@
 import { Context, Next } from 'hono';
 import { AppError, ErrorCodes } from '../lib/errors.js';
+import { auditMutation } from './audit.js';
 import { verifyToken, JWTPayload } from '../lib/auth.js';
 
 export const authJWT = async (c: Context, next: Next) => {
@@ -18,7 +19,7 @@ export const authJWT = async (c: Context, next: Next) => {
     throw new AppError(ErrorCodes.INVALID_TOKEN, 'Token inválido o expirado', 401);
   }
   c.set('user', payload);
-  await next();
+  await auditMutation(c, next);
 };
 
 export const getAuthUser = (c: Context): JWTPayload => c.get('user');
