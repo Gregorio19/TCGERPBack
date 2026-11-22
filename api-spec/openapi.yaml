@@ -647,9 +647,16 @@ components:
           type: string
           description: Ruta relativa; GET con JWT en .../visits/{visitId}/attachments/{id}/download
 
+    CustomerVisitType:
+      type: string
+      enum: [compra, venta_a_tienda, tasacion, consignacion, torneo_evento, consulta, otro]
+
     CustomerVisit:
       type: object
+      required: [tipo]
       properties:
+        tipo:
+          $ref: '#/components/schemas/CustomerVisitType'
         id:
           type: string
           format: uuid
@@ -839,14 +846,6 @@ components:
           $ref: '#/components/schemas/RrhhContratoVigenteResumen'
           nullable: true
           description: Datos del contrato activo (vigente); null si no tiene
-        montoCitaBruta:
-          type: integer
-          nullable: true
-          description: Monto por consulta bruta (CLP enteros)
-        montoCitaTotal:
-          type: integer
-          nullable: true
-          description: Monto por consulta total (CLP enteros)
         fechaCreacion: { type: string, format: date-time }
         fechaActualizacion: { type: string, format: date-time }
 
@@ -866,16 +865,6 @@ components:
         cargoId:
           type: string
           format: uuid
-        montoCitaBruta:
-          type: integer
-          minimum: 0
-          nullable: true
-          description: Monto por consulta bruta (CLP enteros)
-        montoCitaTotal:
-          type: integer
-          minimum: 0
-          nullable: true
-          description: Monto por consulta total (CLP enteros)
         datosBancarios:
           $ref: '#/components/schemas/RrhhDatosBancarios'
         previsional:
@@ -893,16 +882,6 @@ components:
           type: string
           format: uuid
           nullable: true
-        montoCitaBruta:
-          type: integer
-          minimum: 0
-          nullable: true
-          description: Monto por consulta bruta (CLP enteros)
-        montoCitaTotal:
-          type: integer
-          minimum: 0
-          nullable: true
-          description: Monto por consulta total (CLP enteros)
         direccion:
           $ref: '#/components/schemas/RrhhDireccion'
         datosBancarios:
@@ -2275,169 +2254,6 @@ components:
           items:
             $ref: '#/components/schemas/ChartTrendRow'
 
-    AppointmentStatus:
-      type: string
-      enum: [tentative, confirmed, cancelled, completed, no_show]
-    AppointmentSource:
-      type: string
-      enum: [manual, web, phone, whatsapp]
-    AppointmentSlot:
-      type: object
-      required: [employeeId, startAt, endAt, durationMin, isAvailable]
-      properties:
-        employeeId:
-          type: string
-          format: uuid
-        startAt:
-          type: string
-          format: date-time
-        endAt:
-          type: string
-          format: date-time
-        durationMin:
-          type: integer
-        isAvailable:
-          type: boolean
-        reason:
-          type: string
-    AppointmentItem:
-      type: object
-      required: [id, customerId, employeeId, startAt, endAt, durationMin, status, source, customerNombre, employeeNombre, customerSnapshot, employeeSnapshot]
-      properties:
-        id:
-          type: string
-          format: uuid
-        customerId:
-          type: string
-          format: uuid
-        employeeId:
-          type: string
-          format: uuid
-        serviceTypeId:
-          type: string
-          format: uuid
-          nullable: true
-        serviceTypeName:
-          type: string
-          nullable: true
-        startAt:
-          type: string
-          format: date-time
-        endAt:
-          type: string
-          format: date-time
-        durationMin:
-          type: integer
-        status:
-          $ref: '#/components/schemas/AppointmentStatus'
-        source:
-          $ref: '#/components/schemas/AppointmentSource'
-        note:
-          type: string
-          nullable: true
-        customerNombre:
-          type: string
-          description: "Nombre y apellido del cliente, listo para mostrar en UI"
-        employeeNombre:
-          type: string
-          description: "Nombre completo del empleado, listo para mostrar en UI"
-        customerSnapshot:
-          type: object
-          required: [id, nombre, apellido, nombreCompleto]
-        employeeSnapshot:
-          type: object
-          required: [id, nombre, apellidoPaterno, apellidoMaterno, nombreCompleto, cargo]
-          properties:
-            cargo:
-              type: string
-              nullable: true
-    CreateAppointmentRequest:
-      type: object
-      required: [customerId, employeeId, startAt]
-      properties:
-        customerId:
-          type: string
-          format: uuid
-        employeeId:
-          type: string
-          format: uuid
-        serviceTypeId:
-          type: string
-          format: uuid
-        startAt:
-          type: string
-          format: date-time
-        endAt:
-          type: string
-          format: date-time
-        durationMin:
-          type: integer
-          enum: [15, 30, 45, 60]
-        source:
-          $ref: '#/components/schemas/AppointmentSource'
-        note:
-          type: string
-        status:
-          type: string
-          enum: [tentative, confirmed]
-    RescheduleAppointmentRequest:
-      type: object
-      required: [startAt]
-      properties:
-        startAt:
-          type: string
-          format: date-time
-        endAt:
-          type: string
-          format: date-time
-        durationMin:
-          type: integer
-          enum: [15, 30, 45, 60]
-        employeeId:
-          type: string
-          format: uuid
-    CancelAppointmentRequest:
-      type: object
-      required: [reason]
-      properties:
-        reason:
-          type: string
-    CreateAppointmentServiceTypeRequest:
-      type: object
-      required: [name, durationOptions]
-      properties:
-        name:
-          type: string
-        durationOptions:
-          type: array
-          items:
-            type: integer
-        bufferBeforeMin:
-          type: integer
-        bufferAfterMin:
-          type: integer
-        allowOverbooking:
-          type: boolean
-        isActive:
-          type: boolean
-    CreateAppointmentHoldRequest:
-      type: object
-      required: [employeeId, startAt, endAt]
-      properties:
-        employeeId:
-          type: string
-          format: uuid
-        startAt:
-          type: string
-          format: date-time
-        endAt:
-          type: string
-          format: date-time
-        ttlMinutes:
-          type: integer
-          minimum: 1
-          maximum: 30
-
 paths:
   # PRODUCTOS
   /products:
@@ -3649,6 +3465,10 @@ paths:
             format: uuid
         - $ref: '#/components/parameters/page'
         - $ref: '#/components/parameters/pageSize'
+        - name: tipo
+          in: query
+          schema:
+            $ref: '#/components/schemas/CustomerVisitType'
       responses:
         '200':
           description: Lista paginada de visitas con attachments[] embebido
@@ -3663,6 +3483,8 @@ paths:
                         type: array
                         items:
                           $ref: '#/components/schemas/CustomerVisit'
+        '422':
+          $ref: '#/components/responses/Error422'
         '404':
           $ref: '#/components/responses/NotFound'
     post:
@@ -3685,6 +3507,10 @@ paths:
               type: object
               required: [descripcion]
               properties:
+                tipo:
+                  allOf:
+                    - $ref: '#/components/schemas/CustomerVisitType'
+                  default: otro
                 descripcion:
                   type: string
                   maxLength: 50000
@@ -3698,6 +3524,54 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CustomerVisit'
+        '422':
+          $ref: '#/components/responses/Error422'
+
+  /customers/{id}/visits/{visitId}:
+    patch:
+      tags: [customers]
+      summary: Actualizar visita / nota
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: visitId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                tipo:
+                  allOf:
+                    - $ref: '#/components/schemas/CustomerVisitType'
+                  default: otro
+                descripcion:
+                  type: string
+                  maxLength: 50000
+                fecha:
+                  type: string
+                  format: date-time
+      responses:
+        '200':
+          description: Visita actualizada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerVisit'
+        '404':
+          $ref: '#/components/responses/NotFound'
         '422':
           $ref: '#/components/responses/Error422'
 
@@ -4890,7 +4764,7 @@ paths:
       summary: Obtener calendario masivo de empleados (agrupado)
       description: |
         Retorna calendario resuelto de todos los empleados filtrados, agrupado por empleado.
-        Útil para pintar múltiples agendas sin hacer N requests.
+        Devuelve los horarios de varios empleados en una sola solicitud.
       security: []
       parameters:
         - name: from
@@ -4932,218 +4806,6 @@ paths:
                 $ref: '#/components/schemas/RrhhEnvelopeScheduleCalendarBulk'
         '422':
           $ref: '#/components/responses/Error422'
-
-  /appointments/availability:
-    get:
-      tags: [customers]
-      summary: Obtener disponibilidad de agenda
-      parameters:
-        - name: from
-          in: query
-          required: true
-          schema:
-            type: string
-            format: date
-        - name: to
-          in: query
-          required: true
-          schema:
-            type: string
-            format: date
-        - name: durationMin
-          in: query
-          required: true
-          schema:
-            type: integer
-        - name: employeeIds
-          in: query
-          required: false
-          description: CSV UUIDs
-          schema:
-            type: string
-        - name: branchId
-          in: query
-          required: false
-          schema:
-            type: string
-            format: uuid
-        - name: serviceTypeId
-          in: query
-          required: false
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200':
-          description: Slots de disponibilidad
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/AppointmentSlot'
-        '422':
-          $ref: '#/components/responses/Error422'
-
-  /appointments:
-    get:
-      tags: [customers]
-      summary: Listar citas
-      parameters:
-        - name: from
-          in: query
-          required: true
-          schema:
-            type: string
-            format: date-time
-        - name: to
-          in: query
-          required: true
-          schema:
-            type: string
-            format: date-time
-        - name: employeeId
-          in: query
-          schema:
-            type: string
-            format: uuid
-        - name: customerId
-          in: query
-          schema:
-            type: string
-            format: uuid
-        - name: status
-          in: query
-          description: CSV de estados
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Lista de citas
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/AppointmentItem'
-    post:
-      tags: [customers]
-      summary: Crear cita
-      parameters:
-        - name: Idempotency-Key
-          in: header
-          required: false
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CreateAppointmentRequest'
-      responses:
-        '201':
-          description: Cita creada
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AppointmentItem'
-        '409':
-          $ref: '#/components/responses/Conflict'
-        '422':
-          $ref: '#/components/responses/Error422'
-
-  /appointments/{id}/reschedule:
-    patch:
-      tags: [customers]
-      summary: Reprogramar cita
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/RescheduleAppointmentRequest'
-      responses:
-        '200':
-          description: Cita reprogramada
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AppointmentItem'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/Conflict'
-
-  /appointments/{id}/cancel:
-    patch:
-      tags: [customers]
-      summary: Cancelar cita
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CancelAppointmentRequest'
-      responses:
-        '200':
-          description: Cita cancelada
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AppointmentItem'
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-  /appointments/holds:
-    post:
-      tags: [customers]
-      summary: Crear hold temporal de agenda
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CreateAppointmentHoldRequest'
-      responses:
-        '201':
-          description: Hold creado
-          content:
-            application/json:
-              schema:
-                type: object
-
-  /appointments/service-types:
-    post:
-      tags: [customers]
-      summary: Crear tipo de servicio de agenda
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CreateAppointmentServiceTypeRequest'
-      responses:
-        '201':
-          description: Tipo creado
-          content:
-            application/json:
-              schema:
-                type: object
 
   # RRHH — CONTRATOS (un contrato vigente por empleado; al crear uno nuevo el anterior pasa a respaldo)
   /hr/contracts/{id}/terminar:

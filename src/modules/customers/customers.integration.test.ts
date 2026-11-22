@@ -6,7 +6,7 @@ import app from '../../app.js';
 const CUSTOMER_ID = '550e8400-e29b-41d4-a716-446655440001';
 
 describe('Clientes — visitas (integración)', () => {
-  it('POST visita y GET listado con token admin', async () => {
+  it('crea, actualiza y filtra visitas por tipo', async () => {
     const loginRes = await app.request('http://localhost/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -16,7 +16,7 @@ describe('Clientes — visitas (integración)', () => {
     const { token } = (await loginRes.json()) as { token: string };
 
     const descripcion = 'Nota de prueba\n  con espacios y segunda línea.';
-    const fechaIso = '2026-04-01T14:30:00.000Z';
+    const fechaIso = new Date().toISOString();
 
     const postRes = await app.request(
       `http://localhost/api/customers/${CUSTOMER_ID}/visits`,
@@ -35,23 +35,41 @@ describe('Clientes — visitas (integración)', () => {
       id: string;
       customerId: string;
       descripcion: string;
+      tipo: string;
       usuario: { nombre: string; username: string };
     };
     assert.equal(created.customerId, CUSTOMER_ID);
     assert.equal(created.descripcion, descripcion);
+    assert.equal(created.tipo, 'otro');
     assert.ok(created.id);
     assert.ok(created.usuario?.username);
 
+    const patchRes = await app.request(
+      'http://localhost/api/customers/' + CUSTOMER_ID + '/visits/' + created.id,
+      {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + token,
+        },
+        body: JSON.stringify({ tipo: 'compra' }),
+      }
+    );
+    const patchText = await patchRes.text();
+    assert.equal(patchRes.status, 200, patchText);
+    assert.equal(JSON.parse(patchText).tipo, 'compra');
+
     const listRes = await app.request(
-      `http://localhost/api/customers/${CUSTOMER_ID}/visits?page=1&limit=10`
+      `http://localhost/api/customers/${CUSTOMER_ID}/visits?page=1&limit=10&tipo=compra`
     );
     assert.equal(listRes.status, 200);
     const listJson = (await listRes.json()) as {
-      data: Array<{ id: string; descripcion: string }>;
+      data: Array<{ id: string; descripcion: string; tipo: string }>;
       pagination: { total: number };
     };
     assert.ok(Array.isArray(listJson.data));
     assert.ok(listJson.pagination.total >= 1);
+    assert.ok(listJson.data.every((v) => v.tipo === 'compra'));
     const found = listJson.data.find((v) => v.id === created.id);
     assert.ok(found);
     assert.equal(found!.descripcion, descripcion);

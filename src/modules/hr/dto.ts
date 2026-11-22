@@ -217,8 +217,6 @@ export const createEmployeeDto = z.object({
   fechaNacimiento: z.string(),
   direccion: direccionSchema.optional(),
   cargoId: z.string().uuid().optional(),
-  montoCitaBruta: z.number().int().nonnegative().optional().nullable(),
-  montoCitaTotal: z.number().int().nonnegative().optional().nullable(),
   datosBancarios: datosBancariosSchema.optional(),
   previsional: previsionalSchema.optional(),
 });
@@ -228,8 +226,6 @@ export const updateEmployeeDto = z.object({
   telefono: z.string().optional(),
   estado: z.enum(['activo', 'inactivo', 'suspendido', 'licencia']).optional(),
   cargoId: z.string().uuid().nullable().optional(),
-  montoCitaBruta: z.number().int().nonnegative().optional().nullable(),
-  montoCitaTotal: z.number().int().nonnegative().optional().nullable(),
   direccion: direccionSchema.optional(),
   datosBancarios: datosBancariosSchema.optional(),
   previsional: previsionalSchema.optional(),

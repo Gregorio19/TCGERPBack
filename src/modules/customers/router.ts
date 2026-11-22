@@ -8,6 +8,7 @@ import {
   listCustomersQueryDto,
   customerIdParamDto,
   createCustomerVisitDto,
+  updateCustomerVisitDto,
   listCustomerVisitsQueryDto,
   customerAttachmentIdParamDto,
   listCustomerAttachmentsQueryDto,
@@ -123,7 +124,7 @@ customersRouter.get(
     if (query.limit) queryRecord.limit = query.limit;
     if (query.pageSize) queryRecord.pageSize = query.pageSize;
     const pagination = parsePagination(queryRecord);
-    const result = await customerService.listVisits(id, pagination);
+    const result = await customerService.listVisits(id, pagination, query.tipo);
     return ok(c, result);
   }
 );
@@ -140,9 +141,27 @@ customersRouter.post(
     const user = (c as { get: (k: string) => unknown }).get('user') as { userId: string };
     const visit = await customerService.createVisit(id, user.userId, {
       descripcion: body.descripcion,
+      tipo: body.tipo,
       ...(body.fecha !== undefined && { fecha: new Date(body.fecha) }),
     });
     return created(c, visit);
+  }
+);
+
+customersRouter.patch(
+  '/:id/visits/:visitId',
+  authJWT,
+  rbacGuard,
+  validateParams(customerVisitIdParamDto),
+  validateBody(updateCustomerVisitDto),
+  async (c) => {
+    const { id, visitId } = (c as any).get('validatedParams') as z.infer<typeof customerVisitIdParamDto>;
+    const { fecha, ...body } = (c as any).get('validatedBody') as z.infer<typeof updateCustomerVisitDto>;
+    const visit = await customerService.updateVisit(id, visitId, {
+      ...body,
+      ...(fecha !== undefined && { fecha: new Date(fecha) }),
+    });
+    return ok(c, visit);
   }
 );
 

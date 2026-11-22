@@ -1,3 +1,4 @@
+import { CustomerVisitType } from '@prisma/client';
 import { z } from 'zod';
 import { uuidSchema, emailSchema } from '../../lib/validation.js';
 import { validateRut, normalizeRut } from '../../lib/rut-validator.js';
@@ -94,15 +95,26 @@ export const customerIdParamDto = z.object({
 });
 
 /** Visita/nota: texto largo tal cual (sin trim); fecha del hecho opcional (ISO 8601). */
+const customerVisitTypeDto = z.nativeEnum(CustomerVisitType);
+
 export const createCustomerVisitDto = z.object({
+  tipo: customerVisitTypeDto.default('otro'),
   descripcion: z.string().min(1).max(50000),
   fecha: z.string().datetime({ offset: true }).optional(),
 });
 
-export const listCustomerVisitsQueryDto = z.object({
+export const updateCustomerVisitDto = createCustomerVisitDto.partial().extend({
+  tipo: customerVisitTypeDto.default('otro'),
+});
+
+const paginationQueryDto = z.object({
   page: z.string().optional(),
   limit: z.string().optional(),
   pageSize: z.string().optional(),
+});
+
+export const listCustomerVisitsQueryDto = paginationQueryDto.extend({
+  tipo: customerVisitTypeDto.optional(),
 });
 
 export const customerAttachmentIdParamDto = z.object({
@@ -121,6 +133,6 @@ export const customerVisitAttachmentIdParamDto = z.object({
   attachmentId: uuidSchema,
 });
 
-export const listCustomerAttachmentsQueryDto = listCustomerVisitsQueryDto;
-export const listCustomerVisitAttachmentsQueryDto = listCustomerVisitsQueryDto;
+export const listCustomerAttachmentsQueryDto = paginationQueryDto;
+export const listCustomerVisitAttachmentsQueryDto = paginationQueryDto;
 

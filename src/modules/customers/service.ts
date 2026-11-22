@@ -2,8 +2,29 @@ import { db } from '../../lib/db.js';
 import { AppError, ErrorCodes } from '../../lib/errors.js';
 import { PaginationParams, buildPaginatedResponse } from '../../lib/pagination.js';
 import { mapVisitAttachment } from './visit-attachments-service.js';
-import { Prisma } from '@prisma/client';
-import { CustomerStatus } from '@prisma/client';
+import { CustomerStatus, Prisma, type CustomerVisitType } from '@prisma/client';
+
+const visitInclude = {
+  usuario: { select: { nombre: true, username: true } },
+  attachments: {
+    orderBy: { createdAt: 'asc' },
+    include: { uploadedBy: { select: { nombre: true, username: true } } },
+  },
+} satisfies Prisma.CustomerVisitInclude;
+
+function mapVisit(v: Prisma.CustomerVisitGetPayload<{ include: typeof visitInclude }>) {
+  return {
+    id: v.id,
+    customerId: v.customerId,
+    tipo: v.tipo,
+    fecha: v.fecha,
+    descripcion: v.descripcion,
+    createdAt: v.createdAt,
+    updatedAt: v.updatedAt,
+    usuario: v.usuario,
+    attachments: v.attachments.map((a) => mapVisitAttachment(v.customerId, v.id, a)),
+  };
+}
 
 export const customerService = {
   async list(params: PaginationParams & {
@@ -349,11 +370,11 @@ export const customerService = {
     };
   },
 
-  async listVisits(customerId: string, params: PaginationParams) {
+  async listVisits(customerId: string, params: PaginationParams, tipo?: CustomerVisitType) {
     await this.getById(customerId);
     const { page, pageSize } = params;
 
-    const where = { customerId };
+    const where = { customerId, tipo };
 
     const [rows, total] = await Promise.all([
       db.customerVisit.findMany({
@@ -361,72 +382,46 @@ export const customerService = {
         orderBy: { fecha: 'desc' },
         skip: (page - 1) * pageSize,
         take: pageSize,
-        include: {
-          usuario: {
-            select: { nombre: true, username: true },
-          },
-          attachments: {
-            orderBy: { createdAt: 'asc' },
-            include: {
-              uploadedBy: { select: { nombre: true, username: true } },
-            },
-          },
-        },
+        include: visitInclude,
       }),
       db.customerVisit.count({ where }),
     ]);
 
-    const data = rows.map((v) => ({
-      id: v.id,
-      customerId: v.customerId,
-      fecha: v.fecha,
-      descripcion: v.descripcion,
-      createdAt: v.createdAt,
-      updatedAt: v.updatedAt,
-      usuario: {
-        nombre: v.usuario.nombre,
-        username: v.usuario.username,
-      },
-      attachments: v.attachments.map((a) => mapVisitAttachment(customerId, v.id, a)),
-    }));
-
-    return buildPaginatedResponse(data, total, page, pageSize);
+    return buildPaginatedResponse(rows.map(mapVisit), total, page, pageSize);
   },
 
   async createVisit(
     customerId: string,
     usuarioId: string,
-    data: { descripcion: string; fecha?: Date }
+    data: { descripcion: string; fecha?: Date; tipo?: CustomerVisitType }
   ) {
     await this.getById(customerId);
 
     const visit = await db.customerVisit.create({
-      data: {
-        customerId,
-        usuarioId,
-        descripcion: data.descripcion,
-        fecha: data.fecha ?? new Date(),
-      },
-      include: {
-        usuario: {
-          select: { nombre: true, username: true },
-        },
-      },
+      data: { customerId, usuarioId, ...data, fecha: data.fecha ?? new Date() },
+      include: visitInclude,
     });
 
-    return {
-      id: visit.id,
-      customerId: visit.customerId,
-      fecha: visit.fecha,
-      descripcion: visit.descripcion,
-      createdAt: visit.createdAt,
-      updatedAt: visit.updatedAt,
-      usuario: {
-        nombre: visit.usuario.nombre,
-        username: visit.usuario.username,
-      },
-      attachments: [],
-    };
+    return mapVisit(visit);
+  },
+
+  async updateVisit(
+    customerId: string,
+    visitId: string,
+    data: { descripcion?: string; fecha?: Date; tipo: CustomerVisitType }
+  ) {
+    try {
+      const visit = await db.customerVisit.update({
+        where: { id: visitId, customerId },
+        data,
+        include: visitInclude,
+      });
+      return mapVisit(visit);
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
+        throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 'Visita no encontrada', 404);
+      }
+      throw error;
+    }
   },
 };
-
