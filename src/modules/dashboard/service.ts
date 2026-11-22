@@ -1,8 +1,6 @@
 import { db } from '../../lib/db.js';
 import { OrderStatus, Prisma } from '@prisma/client';
-import { STOCK_MINIMO_REF } from '../inventory/alerts.js';
 
-export { STOCK_MINIMO_REF } from '../inventory/alerts.js';
 
 /** Órdenes que cuentan como venta (excluye canceladas / reembolsadas / devueltas). */
 const EXCLUDED_STATUSES: OrderStatus[] = [
@@ -64,7 +62,7 @@ export const dashboardService = {
         where: {
           deletedAt: null,
           activo: true,
-          stock: { lt: STOCK_MINIMO_REF },
+          stock: { lte: db.product.fields.stockMinimo },
         },
       }),
       db.product.groupBy({

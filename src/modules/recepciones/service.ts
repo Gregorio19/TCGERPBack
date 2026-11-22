@@ -2,6 +2,8 @@ import { db } from '../../lib/db.js';
 import { AppError, ErrorCodes } from '../../lib/errors.js';
 import { PaginationParams, buildPaginatedResponse } from '../../lib/pagination.js';
 import { Prisma, ReceptionStatus } from '@prisma/client';
+import type { z } from 'zod';
+import type { createReceptionDto, updateReceptionDto } from './dto.js';
 import { applyStockChange } from '../inventory/stock.js';
 
 // Función para generar número de recepción único
@@ -46,6 +48,10 @@ async function applyReceptionStock(
       refType: 'reception',
       refId: reception.id,
       userId,
+    });
+    await tx.product.update({
+      where: { id: item.productId },
+      data: { precioCompra: item.precioUnitario },
     });
   }
 }
@@ -134,7 +140,7 @@ export const receptionService = {
     return reception;
   },
 
-  async create(data: any, userId: string) {
+  async create(data: z.infer<typeof createReceptionDto>, _userId: string) {
     return db.$transaction(async (tx) => {
       const [proveedor, sucursal] = await Promise.all([
         tx.supplier.findUnique({ where: { id: data.proveedorId } }),
@@ -143,7 +149,7 @@ export const receptionService = {
       if (!proveedor) throw new AppError(ErrorCodes.NOT_FOUND, 'Proveedor no encontrado', 404);
       if (!sucursal) throw new AppError(ErrorCodes.NOT_FOUND, 'Sucursal no encontrada', 404);
 
-      const total = data.items.reduce((sum: number, item: any) => sum + item.cantidad * item.precioUnitario, 0);
+      const total = data.items.reduce((sum, item) => sum + item.cantidad * item.precioUnitario, 0);
       const numero = await generateReceptionNumber(tx);
       const rec = await tx.reception.create({
         data: {
@@ -157,7 +163,7 @@ export const receptionService = {
           estado: data.estado || 'PENDIENTE',
           total,
           items: {
-            create: data.items.map((item: any) => ({
+            create: data.items.map(item => ({
               productId: item.productId,
               cantidad: item.cantidad,
               precioUnitario: item.precioUnitario,
@@ -169,19 +175,18 @@ export const receptionService = {
         include: { items: true },
       });
 
-      // Si se crea como COMPLETADA, actualizar stock inmediatamente
-      if (rec.estado === 'COMPLETADA') {
-        await applyReceptionStock(tx, rec, userId);
-      }
-
       return this.getById(rec.id, tx);
     });
   },
 
-  update(id: string, data: any, userId: string) {
+  update(id: string, data: z.infer<typeof updateReceptionDto>, userId: string) {
     return db.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM receptions WHERE id = ${id} FOR NO KEY UPDATE`;
       const existing = await this.getById(id, tx);
+      // Ya completada: 409 en vez de 200 para no aceptar en silencio cambios descartados.
+      if (existing.estado === 'COMPLETADA' && data.estado === 'COMPLETADA') {
+        throw new AppError(ErrorCodes.CONFLICT_STATE, 'La recepción ya fue completada', 409);
+      }
       if (existing.estado === 'COMPLETADA' || existing.estado === 'CANCELADA') {
         throw new AppError(ErrorCodes.BAD_REQUEST, 'No se puede modificar una recepción ya finalizada', 400);
       }
@@ -192,7 +197,7 @@ export const receptionService = {
       }
 
       const total = data.items 
-        ? data.items.reduce((sum: number, item: any) => sum + (item.cantidad * item.precioUnitario), 0)
+        ? data.items.reduce((sum, item) => sum + (item.cantidad * item.precioUnitario), 0)
         : existing.total;
 
       const updated = await tx.reception.update({
@@ -206,7 +211,7 @@ export const receptionService = {
           total,
           ...(data.items && {
             items: {
-              create: data.items.map((item: any) => ({
+              create: data.items.map(item => ({
                 productId: item.productId,
                 cantidad: item.cantidad,
                 precioUnitario: item.precioUnitario,
@@ -222,8 +227,7 @@ export const receptionService = {
       // Si el nuevo estado es COMPLETADA, actualizar stock
       if (updated.estado === 'COMPLETADA') await applyReceptionStock(tx, updated, userId);
 
-      const { items: _items, ...reception } = updated;
-      return reception;
+      return this.getById(id, tx);
     });
   },
 

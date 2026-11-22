@@ -15,6 +15,5 @@ alertsRouter.get('/stock', authJWT, rbacGuard, validateQuery(branchFilterDto), a
 });
 
 export async function legacyLowStock(c: Context) {
-  const threshold = z.coerce.number().int().min(0).max(2147483647).default(10).parse(c.req.query('threshold'));
-  return ok(c, (await stockAlertsService.legacyLowStock(threshold)).map(mapProduct));
+  return ok(c, (await stockAlertsService.legacyLowStock()).map(mapProduct));
 }

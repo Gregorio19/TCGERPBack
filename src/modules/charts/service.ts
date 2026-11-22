@@ -1,5 +1,5 @@
 import { db } from '../../lib/db.js';
-import { orderCountedWhere, STOCK_MINIMO_REF } from '../dashboard/service.js';
+import { orderCountedWhere } from '../dashboard/service.js';
 
 const STOCK_CHART_LIMIT = 20;
 const TREND_DAYS = 30;
@@ -85,12 +85,12 @@ export const chartsService = {
       where: { deletedAt: null, activo: true },
       orderBy: { stock: 'asc' },
       take: STOCK_CHART_LIMIT,
-      select: { nombre: true, stock: true },
+      select: { nombre: true, stock: true, stockMinimo: true },
     });
     return rows.map((r) => ({
       producto: r.nombre,
       stock: r.stock,
-      stockMinimo: STOCK_MINIMO_REF,
+      stockMinimo: r.stockMinimo,
     }));
   },
 

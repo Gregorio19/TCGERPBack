@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, it } from 'node:test';
 import sharp from 'sharp';
+import type { PaginatedResult } from '../../lib/pagination.js';
 import type { Product } from '@prisma/client';
 
 const mediaDir = await mkdtemp(join(tmpdir(), 'tcgerp-media-'));
@@ -126,3 +127,39 @@ it('valida imágenes y mantiene en disco la galería pública del producto', asy
 });
 
 after(() => rm(mediaDir, { recursive: true, force: true }));
+
+it('pagina productos y busca por nombre o SKU fuera de la primera página', async t => {
+  const token = randomUUID();
+  const categoria = `test-paginacion-${token}`;
+  t.after(() => db.product.deleteMany({ where: { categoria } }));
+  const path = '/api/products';
+  const first = await expectProduct(await jsonRequest(path, 'POST', {
+    nombre: `A producto ${token}`, categoria, precio: 1000,
+  }), 201);
+  const second = await expectProduct(await jsonRequest(path, 'POST', {
+    nombre: `B producto ${token}`, categoria, precio: 1000,
+  }), 201);
+
+  const list = async (params: URLSearchParams) => {
+    const response = await requestAsAdmin(`${path}?${params}`);
+    assert.equal(response.status, 200);
+    return (await response.json()) as PaginatedResult<Product>;
+  };
+  const paging = { category: categoria, limit: '1', sortBy: 'nombre' };
+  const page1 = await list(new URLSearchParams({ ...paging, page: '1' }));
+  const page2 = await list(new URLSearchParams({ ...paging, page: '2' }));
+  assert.deepEqual(page1.data.map((product: Product) => product.id), [first.id]);
+  assert.deepEqual(page2.data.map((product: Product) => product.id), [second.id]);
+  assert.deepEqual(page2.pagination, { page: 2, limit: 1, total: 2, totalPages: 2, hasNext: false, hasPrev: true });
+
+  for (const search of [`b PRODUCTO ${token}`, second.sku!.toLowerCase()]) {
+    const match = await list(new URLSearchParams({ ...paging, search }));
+    assert.deepEqual(match.data.map((product: Product) => product.id), [second.id]);
+    assert.equal(match.pagination.total, 1);
+  }
+
+  const invalid = await jsonRequest(`/api/inventory/${second.id}`, 'PUT', { precio: -1 });
+  assert.equal(invalid.status, 422);
+  const body = await invalid.json() as { error: { details: { field: string }[] } };
+  assert.equal(body.error.details[0].field, 'precio');
+});

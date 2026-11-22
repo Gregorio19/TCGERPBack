@@ -90,6 +90,8 @@ export const productService = {
         { nombre: { contains: search, mode: 'insensitive' } },
         { descripcion: { contains: search, mode: 'insensitive' } },
         { sku: { contains: search, mode: 'insensitive' } },
+        { set: { contains: search, mode: 'insensitive' } },
+        { nroColeccionista: { contains: search, mode: 'insensitive' } },
         { categoria: { contains: search, mode: 'insensitive' } },
       ];
     }
@@ -142,7 +144,7 @@ export const productService = {
     const [data, total] = await Promise.all([
       db.product.findMany({
         where,
-        orderBy,
+        orderBy: [orderBy, { id: 'desc' }],
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),
@@ -175,6 +177,8 @@ export const productService = {
         { nombre: { contains: search, mode: 'insensitive' } },
         { descripcion: { contains: search, mode: 'insensitive' } },
         { sku: { contains: search, mode: 'insensitive' } },
+        { set: { contains: search, mode: 'insensitive' } },
+        { nroColeccionista: { contains: search, mode: 'insensitive' } },
         { categoria: { contains: search, mode: 'insensitive' } },
       ];
     }
@@ -227,7 +231,7 @@ export const productService = {
     const [data, total] = await Promise.all([
       db.product.findMany({
         where,
-        orderBy,
+        orderBy: [orderBy, { id: 'desc' }],
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),
@@ -375,7 +379,7 @@ export const productService = {
       db.product.count({ where: { deletedAt: null } }),
       db.product.count({ where: { activo: true, deletedAt: null } }),
       db.product.count({ where: { activo: false, deletedAt: null } }),
-      db.product.count({ where: { stock: { lte: 10 }, activo: true, deletedAt: null } }),
+      db.product.count({ where: { stock: { lte: db.product.fields.stockMinimo }, activo: true, deletedAt: null } }),
     ]);
 
     return {

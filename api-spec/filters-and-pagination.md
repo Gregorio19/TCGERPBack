@@ -68,16 +68,16 @@
 ### Inventario (`/inventory`)
 
 - `location`: Ubicación/almacén
-- `lowStock`: Solo productos con stock bajo (boolean)
+- `lowStock`: Solo productos con stock menor o igual al mínimo definido en el producto (boolean)
 - `outOfStock`: Solo productos sin stock (boolean)
 
 ### Recepciones (`/recepciones`)
 
-- `proveedor`: ID del proveedor
+- `proveedorId`: ID del proveedor
 - `estado`: Estado de la recepción (PENDIENTE, EN_PROCESO, COMPLETADA, CANCELADA)
-- `sucursal`: ID de la sucursal
-- `fechaInicio`: Fecha desde (ISO 8601)
-- `fechaFin`: Fecha hasta (ISO 8601)
+- `sucursalId`: ID de la sucursal
+- `dateFrom`: Fecha desde (ISO 8601)
+- `dateTo`: Fecha hasta (ISO 8601)
 
 ### Transferencias (`/transferencias`)
 

@@ -16,18 +16,29 @@ export const inventoryService = {
 
     // Si se especifica branchId, usar StockByBranch
     if (filters.branchId) {
-      const where: Prisma.StockByBranchWhereInput = {};
+      const where: Prisma.StockByBranchWhereInput = {
+        branchId: filters.branchId,
+        productId: filters.productId,
+        product: {
+          activo: true,
+          deletedAt: null,
+          ...(search && {
+            OR: [
+              { nombre: { contains: search, mode: 'insensitive' } },
+              { sku: { contains: search, mode: 'insensitive' } },
+            ],
+          }),
+        },
+      };
 
-      if (filters.productId) {
-        where.productId = filters.productId;
-      }
-
-      if (filters.lowStock) {
-        where.cantidad = { lte: 10 };
-      }
-
-      if (filters.outOfStock) {
-        where.cantidad = { lte: 0 };
+      if (filters.outOfStock) where.cantidad = { lte: 0 };
+      else if (filters.lowStock) {
+        const rows = await db.$queryRaw<{ id: string }[]>`
+          SELECT s.id FROM stock_by_branch s
+          JOIN products p ON p.id = s.product_id
+          WHERE s.branch_id = ${filters.branchId} AND s.cantidad <= p.stock_minimo
+        `;
+        where.id = { in: rows.map(row => row.id) };
       }
 
       const orderBy: Prisma.StockByBranchOrderByWithRelationInput = {};
@@ -39,20 +50,7 @@ export const inventoryService = {
 
       const [data, total] = await Promise.all([
         db.stockByBranch.findMany({
-          where: {
-            ...where,
-            branchId: filters.branchId,
-            product: {
-              activo: true,
-              deletedAt: null,
-              ...(search && {
-                OR: [
-                  { nombre: { contains: search, mode: 'insensitive' } },
-                  { sku: { contains: search, mode: 'insensitive' } },
-                ],
-              }),
-            },
-          },
+          where,
           include: {
             product: true,
             branch: {
@@ -67,16 +65,7 @@ export const inventoryService = {
           skip: (page - 1) * pageSize,
           take: pageSize,
         }),
-        db.stockByBranch.count({
-          where: {
-            ...where,
-            branchId: filters.branchId,
-            product: {
-              activo: true,
-              deletedAt: null,
-            },
-          },
-        }),
+        db.stockByBranch.count({ where }),
       ]);
 
       return buildPaginatedResponse(data, total, page, pageSize);
@@ -102,7 +91,7 @@ export const inventoryService = {
     }
 
     if (filters.lowStock) {
-      where.stock = { lte: 10 };
+      where.stock = { lte: db.product.fields.stockMinimo };
     }
 
     if (filters.outOfStock) {
@@ -237,7 +226,7 @@ export const inventoryService = {
         where: {
           activo: true,
           deletedAt: null,
-          stock: { lte: 10, gt: 0 },
+          stock: { lte: db.product.fields.stockMinimo, gt: 0 },
         },
       }),
       db.product.count({
@@ -338,7 +327,7 @@ export const inventoryService = {
         where: {
           activo: true,
           deletedAt: null,
-          stock: { lte: 10, gt: 0 },
+          stock: { lte: db.product.fields.stockMinimo, gt: 0 },
         },
         select: {
           id: true,
@@ -356,7 +345,7 @@ export const inventoryService = {
           sku: p.sku,
           stock: p.stock,
           tipo: 'bajo_stock',
-          prioridad: p.stock <= 5 ? 'alta' : p.stock <= 10 ? 'media' : 'baja',
+          prioridad: 'media',
           mensaje: `Stock bajo: ${p.nombre} (${p.stock} unidades)`,
         });
       });

@@ -8,12 +8,23 @@ export const ReceptionStatusEnum = z.enum([
   'CANCELADA',
 ]);
 
+const maxInt = 2147483647;
+
 // Schema para los items de la recepción
 export const receptionItemSchema = z.object({
-  productId: z.number().int().positive(),
-  cantidad: z.number().int().positive().min(1),
-  precioUnitario: clpSchema.min(0),
+  productId: z.number().int().positive().max(maxInt),
+  cantidad: z.number().int().positive().max(maxInt),
+  precioUnitario: clpSchema.max(maxInt),
 });
+
+const receptionItemsSchema = z.array(receptionItemSchema)
+  .min(1, { message: 'Debe tener al menos un item' })
+  .refine(items => items.reduce((total, item) => total + item.cantidad * item.precioUnitario, 0) <= maxInt, {
+    message: 'El total de la recepción excede el monto permitido',
+  })
+  .refine(items => new Set(items.map(item => item.productId)).size === items.length, {
+    message: 'Cada producto debe ir en una sola línea',
+  });
 
 // DTO para crear recepción
 export const createReceptionDto = z.object({
@@ -21,20 +32,21 @@ export const createReceptionDto = z.object({
   sucursalId: uuidSchema,
   fechaRecepcion: z.string().datetime().or(z.date()),
   fechaDocumento: z.string().datetime().or(z.date()),
-  numeroDocumento: z.string().min(1).max(50),
-  tipoDocumento: z.string().min(1).max(50), // FACTURA, BOLETA, GD, etc.
-  items: z.array(receptionItemSchema).min(1, { message: 'Debe tener al menos un item' }),
-  estado: ReceptionStatusEnum.optional().default('PENDIENTE'),
+  numeroDocumento: z.string().trim().min(1).max(50),
+  tipoDocumento: z.string().trim().min(1).max(50), // FACTURA, BOLETA, GD, etc.
+  items: receptionItemsSchema,
+  // Se completa con PUT: un POST reintentado no debe sumar stock dos veces.
+  estado: ReceptionStatusEnum.exclude(['COMPLETADA']).optional().default('PENDIENTE'),
 });
 
 // DTO para actualizar recepción
 export const updateReceptionDto = z.object({
   fechaRecepcion: z.string().datetime().or(z.date()).optional(),
   fechaDocumento: z.string().datetime().or(z.date()).optional(),
-  numeroDocumento: z.string().min(1).max(50).optional(),
-  tipoDocumento: z.string().min(1).max(50).optional(),
+  numeroDocumento: z.string().trim().min(1).max(50).optional(),
+  tipoDocumento: z.string().trim().min(1).max(50).optional(),
   estado: ReceptionStatusEnum.optional(),
-  items: z.array(receptionItemSchema).min(1).optional(),
+  items: receptionItemsSchema.optional(),
 }).strict();
 
 // DTO para query de listado

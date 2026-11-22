@@ -2139,6 +2139,81 @@ components:
           type: string
           format: date-time
 
+    UpdateReceptionRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        fechaRecepcion:
+          type: string
+          format: date-time
+        fechaDocumento:
+          type: string
+          format: date-time
+        numeroDocumento:
+          type: string
+          minLength: 1
+          maxLength: 50
+        tipoDocumento:
+          type: string
+          minLength: 1
+          maxLength: 50
+        estado:
+          type: string
+          enum: [PENDIENTE, EN_PROCESO, COMPLETADA, CANCELADA]
+        items:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/ReceptionItemRequest'
+
+    ReceptionItemRequest:
+      type: object
+      required: [productId, cantidad, precioUnitario]
+      properties:
+        productId:
+          type: integer
+          minimum: 1
+        cantidad:
+          type: integer
+          minimum: 1
+        precioUnitario:
+          type: integer
+          minimum: 0
+
+    CreateReceptionRequest:
+      type: object
+      required: [proveedorId, sucursalId, fechaRecepcion, fechaDocumento, numeroDocumento, tipoDocumento, items]
+      properties:
+        proveedorId:
+          type: string
+          format: uuid
+        sucursalId:
+          type: string
+          format: uuid
+        fechaRecepcion:
+          type: string
+          format: date-time
+        fechaDocumento:
+          type: string
+          format: date-time
+        numeroDocumento:
+          type: string
+          minLength: 1
+          maxLength: 50
+        tipoDocumento:
+          type: string
+          minLength: 1
+          maxLength: 50
+        estado:
+          type: string
+          enum: [PENDIENTE, EN_PROCESO, COMPLETADA, CANCELADA]
+          default: PENDIENTE
+        items:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/ReceptionItemRequest'
+
     CreateProductRequest:
       type: object
       description: Las cartas individuales requieren número de coleccionista, rareza, idioma y condición.
@@ -3278,6 +3353,7 @@ paths:
     get:
       tags: [products]
       summary: Productos con stock bajo
+      description: Incluye productos con stock positivo menor o igual a su stockMinimo.
       responses:
         '200':
           description: Lista de productos
@@ -3505,7 +3581,13 @@ paths:
           $ref: '#/components/responses/Forbidden'
     put:
       tags: [inventory]
-      summary: Actualizar item de inventario
+      summary: Actualizar un producto desde inventario
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProductRequest'
       parameters:
         - name: id
           in: path
@@ -3515,8 +3597,8 @@ paths:
       responses:
         '200':
           description: Item actualizado
-        '409':
-          description: Stock insuficiente en la sucursal de origen o de ajuste
+        '422':
+          $ref: '#/components/responses/Error422'
         '404':
           $ref: '#/components/responses/NotFound'
         '401':
@@ -3563,6 +3645,7 @@ paths:
     get:
       tags: [inventory]
       summary: Productos con stock bajo
+      description: Incluye productos con stock positivo menor o igual a su stockMinimo.
       responses:
         '200':
           description: Lista de productos
@@ -3744,11 +3827,12 @@ paths:
     get:
       tags: [recepciones]
       summary: Listar recepciones
+      description: Requiere inventory.view.
       parameters:
         - $ref: '#/components/parameters/page'
         - $ref: '#/components/parameters/pageSize'
         - $ref: '#/components/parameters/search'
-        - name: proveedor
+        - name: proveedorId
           in: query
           schema:
             type: string
@@ -3756,7 +3840,7 @@ paths:
           in: query
           schema:
             type: string
-        - name: sucursal
+        - name: sucursalId
           in: query
           schema:
             type: string
@@ -3772,12 +3856,13 @@ paths:
     post:
       tags: [recepciones]
       summary: Crear recepción
+      description: Requiere inventory.edit. El estado COMPLETADA aplica el stock y el costo en la misma transacción.
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
+              $ref: '#/components/schemas/CreateReceptionRequest'
       responses:
         '201':
           description: Recepción creada
@@ -3792,6 +3877,7 @@ paths:
     get:
       tags: [recepciones]
       summary: Obtener recepción por ID
+      description: Requiere inventory.view.
       parameters:
         - name: id
           in: path
@@ -3809,7 +3895,14 @@ paths:
           $ref: '#/components/responses/Forbidden'
     put:
       tags: [recepciones]
-      summary: Actualizar recepción
+      summary: Actualizar o completar recepción
+      description: Requiere inventory.edit. Enviar estado COMPLETADA aplica el stock en la sucursal y actualiza el costo de compra. Repetir la finalización devuelve la recepción completada.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateReceptionRequest'
       parameters:
         - name: id
           in: path
@@ -3819,6 +3912,8 @@ paths:
       responses:
         '200':
           description: Recepción actualizada
+        '422':
+          $ref: '#/components/responses/Error422'
         '404':
           $ref: '#/components/responses/NotFound'
         '401':
@@ -3828,6 +3923,7 @@ paths:
     delete:
       tags: [recepciones]
       summary: Eliminar recepción
+      description: Requiere inventory.edit.
       parameters:
         - name: id
           in: path
@@ -3835,7 +3931,7 @@ paths:
           schema:
             type: string
       responses:
-        '200':
+        '204':
           description: Recepción eliminada
         '404':
           $ref: '#/components/responses/NotFound'
