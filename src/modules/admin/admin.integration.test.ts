@@ -1,9 +1,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
+import { db } from '../../lib/db.js';
 import { requestAsAdmin } from '../../test-utils/auth.js';
-
-/** Rol doctor del seed (`api-spec/seeds.json`); sin permisos por defecto (solo Admin recibe catálogo en seed). */
-const ROLE_DOCTOR_ID = '550e8400-e29b-41d4-a716-446655440083';
 
 describe('Admin API (integración)', () => {
   it('GET /api/admin/stats devuelve KPIs y arrays esperados', async () => {
@@ -38,14 +37,21 @@ describe('Admin API (integración)', () => {
     assert.ok(Array.isArray(json), 'catálogo sin paginar debe ser un array');
   });
 
-  it('PUT /api/admin/roles/:id/permissions con JWT sincroniza permisos del rol', async () => {
+  it('PUT /api/admin/roles/:id/permissions con JWT sincroniza permisos del rol', async (t) => {
+    const role = await db.role.create({
+      data: { nombre: 'Prueba ' + randomUUID(), descripcion: 'Rol temporal de integración' },
+    });
+    t.after(async () => {
+      await db.role.delete({ where: { id: role.id } });
+    });
+
     const permRes = await requestAsAdmin('/api/admin/permissions');
     assert.equal(permRes.status, 200);
     const perms = (await permRes.json()) as Array<{ id: string }>;
     const permissionIds = Array.isArray(perms) ? perms.slice(0, 2).map((p) => p.id) : [];
 
     const putRes = await requestAsAdmin(
-      `/api/admin/roles/${ROLE_DOCTOR_ID}/permissions`,
+      `/api/admin/roles/${role.id}/permissions`,
       {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },

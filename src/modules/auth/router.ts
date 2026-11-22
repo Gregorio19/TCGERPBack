@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import type { HttpBindings } from '@hono/node-server';
+import type { Prisma } from '@prisma/client';
 import { validateBody } from '../../lib/validation.js';
 import { z } from 'zod';
 import { db } from '../../lib/db.js';
@@ -17,6 +18,33 @@ export const authRouter = new Hono<{
 }>();
 
 const DUMMY_PASSWORD_HASH = '$2a$10$Atju59QNiuc9NUD7deFoKO6jBEYqfWcaKxfvFCeAj8PW7bGKR0PU6';
+
+const authUserInclude = {
+  userRoles: { include: { role: true } },
+  sucursal: { select: { nombre: true } },
+} satisfies Prisma.UserInclude;
+
+function authUserResponse(
+  user: Prisma.UserGetPayload<{ include: typeof authUserInclude }>,
+  role: string,
+  permissions: string[]
+) {
+  return {
+    id: user.id,
+    username: user.username,
+    email: user.email,
+    nombre: user.nombre,
+    apellido: user.apellido,
+    telefono: user.telefono,
+    sucursalId: user.sucursalId,
+    sucursal: user.sucursal,
+    roles: user.userRoles
+      .filter(({ role }) => role.activo && !role.deletedAt)
+      .map(({ role }) => role.nombre),
+    role,
+    permissions,
+  };
+}
 
 const loginDto = z.object({
   username: z.string().min(1),
@@ -36,7 +64,7 @@ authRouter.post('/login', validateBody(loginDto), async (c) => {
   const user = await verifyLogin(ip, username, async () => {
     const candidate = await db.user.findUnique({
       where: { username },
-      include: { userRoles: { include: { role: true } } },
+      include: authUserInclude,
     });
     const isValid = await comparePassword(password, candidate?.passwordHash ?? DUMMY_PASSWORD_HASH);
     return isValid && candidate?.activo && !candidate.deletedAt ? candidate : null;
@@ -59,15 +87,7 @@ authRouter.post('/login', validateBody(loginDto), async (c) => {
     token,
     refreshToken,
     expiresIn: 86400,
-    user: {
-      id: user.id,
-      username: user.username,
-      email: user.email,
-      nombre: user.nombre,
-      apellido: user.apellido,
-      role,
-      permissions,
-    },
+    user: authUserResponse(user, role, permissions),
   });
 });
 
@@ -81,7 +101,7 @@ authRouter.post('/refresh', validateBody(refreshDto), async (c) => {
 
   const user = await db.user.findUnique({
     where: { id: userId },
-    include: { userRoles: { include: { role: true } } },
+    include: authUserInclude,
   });
   if (!user || !user.activo || user.deletedAt) {
     throw new AppError(ErrorCodes.UNAUTHORIZED, 'Usuario no válido', 401);
@@ -100,15 +120,7 @@ authRouter.post('/refresh', validateBody(refreshDto), async (c) => {
     token,
     refreshToken,
     expiresIn: 86400,
-    user: {
-      id: user.id,
-      username: user.username,
-      email: user.email,
-      nombre: user.nombre,
-      apellido: user.apellido,
-      role,
-      permissions,
-    },
+    user: authUserResponse(user, role, permissions),
   });
 });
 
@@ -123,9 +135,7 @@ authRouter.get('/me', authJWT, async (c) => {
   const payload = c.get('user');
   const user = await db.user.findUnique({
     where: { id: payload.userId },
-    include: {
-      userRoles: { include: { role: true } },
-    },
+    include: authUserInclude,
   });
   if (!user || user.deletedAt || !user.activo) {
     throw new AppError(ErrorCodes.UNAUTHORIZED, 'Usuario no válido', 401);
@@ -133,15 +143,7 @@ authRouter.get('/me', authJWT, async (c) => {
   const role = user.userRoles[0]?.role?.nombre || payload.role;
   const permissions = await getEffectivePermissionNamesForUserId(user.id);
   return ok(c, {
-    user: {
-      id: user.id,
-      username: user.username,
-      email: user.email,
-      nombre: user.nombre,
-      apellido: user.apellido,
-      role,
-      permissions,
-    },
+    user: authUserResponse(user, role, permissions),
   });
 });
 

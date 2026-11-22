@@ -26,12 +26,33 @@ function loadPermissionsCanonical(): CanonicalCatalog {
   return raw;
 }
 
+const defaultRolePermissions = {
+  Cajero: [
+    'dashboard.view',
+    'sales.view',
+    'sales.create',
+    'customers.view',
+    'customers.create',
+    'customers.edit',
+    'products.view',
+    'inventory.view',
+  ],
+  Bodeguero: [
+    'dashboard.view',
+    'products.view',
+    'products.create',
+    'products.edit',
+    'inventory.view',
+    'inventory.edit',
+  ],
+};
+
 async function seedPermissionsCatalog() {
   const { permissions } = loadPermissionsCanonical();
 
   console.log('🔐 Reconciliando permisos canónicos...');
   await prisma.$transaction(async (tx) => {
-    const permissionIds = [];
+    const permissionIds = new Map<string, string>();
     for (const permission of permissions) {
       const { nombre, ...metadata } = permission;
       const { id } = await tx.permission.upsert({
@@ -40,20 +61,20 @@ async function seedPermissionsCatalog() {
         create: permission,
         select: { id: true },
       });
-      permissionIds.push(id);
+      permissionIds.set(nombre, id);
     }
 
-    // La FK elimina en cascada los enlaces de los permisos fuera del catálogo.
-    await tx.permission.deleteMany({
-      where: { nombre: { notIn: permissions.map(({ nombre }) => nombre) } },
-    });
+    const grants = { Admin: [...permissionIds.keys()], ...defaultRolePermissions };
+    for (const [nombre, permissionNames] of Object.entries(grants)) {
+      const role = await tx.role.findFirst({ where: { nombre, deletedAt: null } });
+      if (!role) continue;
 
-    const adminRole = await tx.role.findFirst({
-      where: { nombre: 'Admin', deletedAt: null },
-    });
-    if (adminRole) {
       await tx.rolePermission.createMany({
-        data: permissionIds.map((permissionId) => ({ roleId: adminRole.id, permissionId })),
+        data: permissionNames.map((name) => {
+          const permissionId = permissionIds.get(name);
+          if (!permissionId) throw new Error('Permiso fuera del catálogo: ' + name);
+          return { roleId: role.id, permissionId };
+        }),
         skipDuplicates: true,
       });
     }
