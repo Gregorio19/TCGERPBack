@@ -1,3 +1,6 @@
+import { serveStatic } from '@hono/node-server/serve-static';
+import { env } from './lib/env.js';
+import { productImagePath } from './modules/products/media.js';
 import { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import { z } from 'zod';
@@ -89,6 +92,19 @@ app.get('/health', async (c) => {
 
 // Documentación Swagger
 app.route('/api-docs', docsRouter);
+
+app.get('/media/*', async (c, next) => {
+  if (!productImagePath.test(c.req.path)) return c.notFound();
+  const serveImage = serveStatic({
+    root: env.MEDIA_DIR,
+    rewriteRequestPath: path => path.slice('/media/'.length),
+    onFound: (_path, context) => {
+      context.header('Cache-Control', 'public, max-age=31536000, immutable');
+      context.header('X-Content-Type-Options', 'nosniff');
+    },
+  });
+  return serveImage(c, next);
+});
 
 // Montar rutas
 app.route('/api', routes);

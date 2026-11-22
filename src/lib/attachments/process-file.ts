@@ -15,6 +15,8 @@ export const ALLOWED_ATTACHMENT_MIMES = new Set([
   'application/vnd.ms-excel',
 ]);
 
+export const PRODUCT_IMAGE_MAX_BYTES = 10 * 1024 * 1024;
+
 const IMAGE_MIMES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
 
 export interface ProcessedAttachmentFile {
@@ -31,8 +33,10 @@ export function sanitizeFilename(name: string): string {
 
 export async function processAttachmentFile(
   input: Buffer,
-  declaredName: string
+  _declaredName: string,
+  options?: { productImage: true }
 ): Promise<ProcessedAttachmentFile> {
+  const maxBytes = options?.productImage ? PRODUCT_IMAGE_MAX_BYTES : env.ATTACHMENTS_MAX_BYTES;
   const originalSizeBytes = input.length;
 
   if (originalSizeBytes === 0) {
@@ -41,25 +45,35 @@ export async function processAttachmentFile(
     ]);
   }
 
-  if (originalSizeBytes > env.ATTACHMENTS_MAX_BYTES) {
+  if (originalSizeBytes > maxBytes) {
     throw new AppError(
       ErrorCodes.INVALID_RANGE,
-      `El archivo supera el límite de ${env.ATTACHMENTS_MAX_BYTES} bytes`,
+      `El archivo supera el límite de ${maxBytes} bytes`,
       422,
       [{ field: 'file', message: 'Tamaño máximo 10 MB' }]
     );
   }
 
-  const detected = await fileTypeFromBuffer(input);
+  const detected = await fileTypeFromBuffer(input).catch(() => undefined);
   const mimeType = detected?.mime;
 
-  if (!mimeType || !ALLOWED_ATTACHMENT_MIMES.has(mimeType)) {
+  if (!mimeType || !(options?.productImage ? IMAGE_MIMES : ALLOWED_ATTACHMENT_MIMES).has(mimeType)) {
     throw new AppError(
       ErrorCodes.INVALID_FORMAT,
-      'Tipo de archivo no permitido. Use imagen, PDF, Word o Excel.',
+      options?.productImage ? 'Tipo de archivo no permitido. Use una imagen.'
+        : 'Tipo de archivo no permitido. Use imagen, PDF, Word o Excel.',
       422,
       [{ field: 'file', message: 'UNSUPPORTED_FILE_TYPE' }]
     );
+  }
+
+  if (options?.productImage) {
+    const buffer = await sharp(input, { limitInputPixels: 40_000_000 }).rotate()
+      .resize({ width: 1200, height: 1200, fit: 'inside', withoutEnlargement: true })
+      .webp({ quality: 80 }).toBuffer().catch(() => {
+        throw new AppError(ErrorCodes.INVALID_FORMAT, 'Imagen inválida', 422);
+      });
+    return { buffer, mimeType: 'image/webp', originalSizeBytes, storedSizeBytes: buffer.length };
   }
 
   if (IMAGE_MIMES.has(mimeType)) {

@@ -1,3 +1,6 @@
+import { randomUUID } from 'node:crypto';
+import { removeProductImage } from './media.js';
+import { singleCardFields, type createProductDto, type updateProductDto } from './dto.js';
 import { db } from '../../lib/db.js';
 import { AppError, ErrorCodes } from '../../lib/errors.js';
 import { PaginationParams, buildPaginatedResponse, parsePagination } from '../../lib/pagination.js';
@@ -31,6 +34,36 @@ export function parseProductsListQuery(query: z.output<typeof listProductsQueryD
   };
 
   return { ...pagination, ...filters };
+}
+
+export async function lockProduct(tx: Prisma.TransactionClient, id: number) {
+  const [row] = await tx.$queryRaw<{ id: number }[]>`
+    SELECT id FROM products WHERE id = ${id} AND deleted_at IS NULL FOR NO KEY UPDATE
+  `;
+  if (!row) {
+    throw new AppError(ErrorCodes.PRODUCT_NOT_FOUND, `Producto con ID ${id} no encontrado`, 404);
+  }
+  return tx.product.findUniqueOrThrow({ where: { id } });
+}
+
+const emptyCard = { nroColeccionista: null, rareza: null, idioma: null, condicion: null };
+
+function cardData(fields: unknown) {
+  const { nro_coleccionista, ...card } = singleCardFields.parse(fields);
+  return { ...card, nroColeccionista: nro_coleccionista };
+}
+
+function generateSku(name: string) {
+  const prefix = name.normalize('NFD').replace(/\p{M}/gu, '').toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '-').slice(0, 17).replace(/^-+|-+$/g, '');
+  return `${prefix || 'PROD'}-${randomUUID().slice(0, 6).toUpperCase()}`;
+}
+
+function handleDuplicateSku(error: unknown) {
+  if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+    throw new AppError(ErrorCodes.DUPLICATE_SKU, 'Ya existe un producto con ese SKU', 409);
+  }
+  throw error;
 }
 
 export const productService = {
@@ -220,175 +253,91 @@ export const productService = {
     return product;
   },
 
-  async create(data: any, userId: string) {
-    // Verificar SKU único si existe
-    if (data.sku) {
-      const existing = await db.product.findUnique({
-        where: { sku: data.sku },
-      });
-
-      if (existing) {
-        throw new AppError(
-          ErrorCodes.DUPLICATE_SKU,
-          `Ya existe un producto con el SKU '${data.sku}'`,
-          409
-        );
-      }
-    }
-
-    // Convertir strings vacíos a undefined para campos opcionales
-    const cleanData = {
-      ...data,
-      nro_coleccionista: data.nro_coleccionista && data.nro_coleccionista.trim() !== '' 
-        ? data.nro_coleccionista 
-        : undefined,
-      descripcion: data.descripcion && data.descripcion.trim() !== '' 
-        ? data.descripcion 
-        : undefined,
-      set: data.set && data.set.trim() !== '' 
-        ? data.set 
-        : undefined,
-    };
-
+  async create(data: z.output<typeof createProductDto>, userId: string) {
     return db.$transaction(async (tx) => {
       const product = await tx.product.create({
         data: {
-          nombre: cleanData.nombre,
-          descripcion: cleanData.descripcion,
-          sku: cleanData.sku,
-          juego: cleanData.juego,
-          set: cleanData.set,
-          nroColeccionista: cleanData.nro_coleccionista,
-          rareza: cleanData.rareza,
-          idioma: cleanData.idioma,
-          condicion: cleanData.condicion,
-          tipo: cleanData.tipo,
-          precio: cleanData.precio,
-          precioCompra: cleanData.precio_compra,
-          iva: cleanData.iva || 19,
-          stockMinimo: cleanData.stockMinimo,
-          categoria: cleanData.categoria,
-          imagen: cleanData.imagen,
-          imagenes: cleanData.imagenes || [],
-          activo: cleanData.activo !== undefined ? cleanData.activo : true,
+          nombre: data.nombre,
+          descripcion: data.descripcion || null,
+          sku: data.sku || generateSku(data.nombre),
+          juego: data.juego,
+          set: data.set || null,
+          ...(data.tipo === 'single' ? cardData(data) : emptyCard),
+          tipo: data.tipo,
+          precio: data.precio,
+          precioCompra: (data.stock > 0 ? data.initialCost : undefined) ?? data.precio_compra,
+          iva: data.iva,
+          stockMinimo: data.stockMinimo,
+          categoria: data.categoria,
+          activo: data.activo,
         },
       });
-      if (!cleanData.stock) return product;
+      if (!data.stock) return product;
+      const branchId = data.branchId ?? await userBranchId(tx, userId);
+      const branch = await tx.branch.findFirst({ where: { id: branchId, activa: true, deletedAt: null } });
+      if (!branch) throw new AppError(ErrorCodes.BRANCH_NOT_FOUND, 'Sucursal no encontrada', 404);
       const result = await applyStockChange(tx, {
         productId: product.id,
-        branchId: await userBranchId(tx, userId),
-        quantity: cleanData.stock,
+        branchId,
+        quantity: data.stock,
         userId,
         type: 'ajuste',
         reason: 'Stock inicial',
       });
       return result.product;
-    });
+    }).catch(handleDuplicateSku);
   },
 
-  async update(id: number, data: any, userId: string) {
-    // Buscar producto sin filtrar por activo (permite editar productos inactivos)
-    const existing = await db.product.findFirst({
-      where: {
-        id,
-        deletedAt: null,
-      },
-    });
-
-    if (!existing) {
-      throw new AppError(ErrorCodes.PRODUCT_NOT_FOUND, `Producto con ID ${id} no encontrado`, 404);
-    }
-
-    // Verificar SKU único si se está actualizando
-    if (data.sku && data.sku !== existing.sku) {
-      const duplicate = await db.product.findUnique({
-        where: { sku: data.sku },
-      });
-
-      if (duplicate) {
-        throw new AppError(
-          ErrorCodes.DUPLICATE_SKU,
-          `Ya existe un producto con el SKU '${data.sku}'`,
-          409
-        );
-      }
-    }
-
-    // Normalizar campos: aceptar tanto snake_case como camelCase, y limpiar strings vacíos
-    const nroColeccionista = data.nro_coleccionista !== undefined 
-      ? data.nro_coleccionista 
-      : data.nroColeccionista !== undefined 
-        ? data.nroColeccionista 
-        : undefined;
-    
-    const cleanData = {
-      ...data,
-      nro_coleccionista: nroColeccionista && typeof nroColeccionista === 'string' && nroColeccionista.trim() !== '' 
-        ? nroColeccionista.trim() 
-        : nroColeccionista === null || nroColeccionista === '' 
-          ? null 
-          : undefined,
-      descripcion: data.descripcion !== undefined && typeof data.descripcion === 'string' && data.descripcion.trim() !== '' 
-        ? data.descripcion.trim() 
-        : data.descripcion === null || data.descripcion === '' 
-          ? null 
-          : undefined,
-      set: data.set !== undefined && typeof data.set === 'string' && data.set.trim() !== '' 
-        ? data.set.trim() 
-        : data.set === null || data.set === '' 
-          ? null 
-          : undefined,
-    };
-
+  async update(id: number, data: z.output<typeof updateProductDto>) {
     return db.$transaction(async (tx) => {
-      const product = await tx.product.update({
-        where: { id, deletedAt: null },
+      const existing = await lockProduct(tx, id);
+      const tipo = data.tipo ?? existing.tipo ?? 'sellado';
+      const collectorNumber = data.nro_coleccionista === undefined
+        ? data.nroColeccionista : data.nro_coleccionista;
+      const hasCardEdits = collectorNumber !== undefined || data.rareza !== undefined
+        || data.idioma !== undefined || data.condicion !== undefined;
+      let card: Prisma.ProductUpdateInput = emptyCard;
+      if (tipo === 'single') {
+        card = {};
+        if (hasCardEdits || data.tipo !== undefined) {
+          card = cardData({
+            nro_coleccionista: collectorNumber === undefined ? existing.nroColeccionista : collectorNumber,
+            rareza: data.rareza === undefined ? existing.rareza : data.rareza,
+            idioma: data.idioma === undefined ? existing.idioma : data.idioma,
+            condicion: data.condicion === undefined ? existing.condicion : data.condicion,
+          });
+        }
+      }
+      return tx.product.update({
+        where: { id },
         data: {
-          ...(cleanData.nombre !== undefined && { nombre: cleanData.nombre }),
-          ...(cleanData.descripcion !== undefined && { descripcion: cleanData.descripcion }),
-          ...(cleanData.sku !== undefined && { sku: cleanData.sku }),
-          ...(cleanData.juego !== undefined && { juego: cleanData.juego }),
-          ...(cleanData.set !== undefined && { set: cleanData.set }),
-          ...(cleanData.nro_coleccionista !== undefined && { nroColeccionista: cleanData.nro_coleccionista }),
-          ...(cleanData.rareza !== undefined && { rareza: cleanData.rareza }),
-          ...(cleanData.idioma !== undefined && { idioma: cleanData.idioma }),
-          ...(cleanData.condicion !== undefined && { condicion: cleanData.condicion }),
-          ...(cleanData.tipo !== undefined && { tipo: cleanData.tipo }),
-          ...(cleanData.precio !== undefined && { precio: cleanData.precio }),
-          ...(cleanData.precio_compra !== undefined && { precioCompra: cleanData.precio_compra }),
-          ...(cleanData.iva !== undefined && { iva: cleanData.iva }),
-          stockMinimo: cleanData.stockMinimo,
-          ...(cleanData.categoria !== undefined && { categoria: cleanData.categoria }),
-          ...(cleanData.imagen !== undefined && { imagen: cleanData.imagen }),
-          ...(cleanData.imagenes !== undefined && { imagenes: cleanData.imagenes }),
-          ...(cleanData.activo !== undefined && { activo: cleanData.activo }),
+          nombre: data.nombre,
+          descripcion: data.descripcion === '' ? null : data.descripcion,
+          sku: data.sku || undefined,
+          juego: data.juego,
+          set: data.set === '' ? null : data.set,
+          ...card,
+          tipo: data.tipo,
+          precio: data.precio,
+          precioCompra: data.precio_compra,
+          iva: data.iva,
+          stockMinimo: data.stockMinimo,
+          categoria: data.categoria,
         },
       });
-      if (cleanData.stock === undefined) return product;
-      return this.setStock(tx, id, cleanData.stock, userId);
-    });
+    }).catch(handleDuplicateSku);
   },
 
   async delete(id: number) {
-    // Buscar producto sin filtrar por activo (permite eliminar productos inactivos)
-    const existing = await db.product.findFirst({
-      where: {
-        id,
-        deletedAt: null,
-      },
+    const paths = await db.$transaction(async tx => {
+      const product = await lockProduct(tx, id);
+      await tx.product.update({
+        where: { id },
+        data: { activo: false, deletedAt: new Date(), imagen: null, imagenes: [] },
+      });
+      return [...product.imagenes, product.imagen];
     });
-
-    if (!existing) {
-      throw new AppError(ErrorCodes.PRODUCT_NOT_FOUND, `Producto con ID ${id} no encontrado`, 404);
-    }
-
-    await db.product.update({
-      where: { id },
-      data: {
-        activo: false,
-        deletedAt: new Date(),
-      },
-    });
+    await Promise.all(paths.map(path => removeProductImage(id, path)));
   },
 
   updateStock(id: number, stock: number, userId: string) {
@@ -409,13 +358,13 @@ export const productService = {
   async getCategories() {
     const categories = await db.product.findMany({
       where: {
-        activo: true,
         deletedAt: null,
       },
       select: {
         categoria: true,
       },
       distinct: ['categoria'],
+      orderBy: { categoria: 'asc' },
     });
 
     return categories.map((c) => c.categoria);

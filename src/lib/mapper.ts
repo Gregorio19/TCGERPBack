@@ -1,3 +1,4 @@
+import { productImagePaths } from '../modules/products/media.js';
 import dayjs from 'dayjs';
 
 // Mapear fechas a ISO 8601
@@ -14,8 +15,11 @@ export const toCLP = (amount: number | null | undefined): number => {
 
 // Mapear Prisma models a DTOs
 export const mapProduct = (product: any) => {
+  const imagenes = productImagePaths(product);
   return {
     ...product,
+    imagenes,
+    imagen: imagenes[0] ?? null,
     createdAt: toISOString(product.createdAt),
     updatedAt: toISOString(product.updatedAt),
     precio: toCLP(product.precio),

@@ -1,3 +1,8 @@
+import { bodyLimit } from 'hono/body-limit';
+import { inventoryService } from '../inventory/service.js';
+import { AppError, ErrorCodes } from '../../lib/errors.js';
+import { processAttachmentFile, PRODUCT_IMAGE_MAX_BYTES } from '../../lib/attachments/process-file.js';
+import { addProductImage, deleteProductImage, reorderProductImages } from './images.js';
 import { legacyLowStock } from '../inventory/alerts-router.js';
 import { Hono } from 'hono';
 import { authJWT, getAuthUser } from '../../middlewares/auth-jwt.js';
@@ -8,6 +13,7 @@ import {
   updateProductDto,
   listProductsQueryDto,
   productIdParamDto,
+  reorderProductImagesDto,
   updateStockDto,
 } from './dto.js';
 import { parseProductsListQuery, productService } from './service.js';
@@ -73,6 +79,11 @@ productsRouter.get('/categories', authJWT, rbacGuard, async (c) => {
   return ok(c, categories);
 });
 
+productsRouter.get('/stock-branches', authJWT, rbacGuard, async (c) => {
+  const branches = await inventoryService.getLocations();
+  return ok(c, branches.map(({ id, nombre }) => ({ id, nombre })));
+});
+
 // Productos con stock bajo
 productsRouter.get('/low-stock', authJWT, rbacGuard, legacyLowStock);
 
@@ -100,7 +111,7 @@ productsRouter.put(
   async (c) => {
     const { id } = getValidated(c, 'validatedParams', productIdParamDto);
     const data = getValidated(c, 'validatedBody', updateProductDto);
-    const product = await productService.update(id, data, getAuthUser(c).userId);
+    const product = await productService.update(id, data);
     return ok(c, mapProduct(product));
   }
 );
@@ -131,5 +142,43 @@ productsRouter.patch(
     const { stock } = getValidated(c, 'validatedBody', updateStockDto);
     const product = await productService.updateStock(id, stock, getAuthUser(c).userId);
     return ok(c, mapProduct(product));
+  }
+);
+
+productsRouter.post(
+  '/:id/images',
+  authJWT,
+  rbacGuard,
+  validateParams(productIdParamDto),
+  bodyLimit({ maxSize: PRODUCT_IMAGE_MAX_BYTES + 64 * 1024 }),
+  async (c) => {
+    const id = getValidated(c, 'validatedParams', productIdParamDto).id;
+    const form = await c.req.formData().catch(() => null);
+    const files = form?.getAll('file') ?? [];
+    const file = files[0];
+    if (!form || !file || typeof file === 'string' || [...form.values()].length !== 1) {
+      throw new AppError(ErrorCodes.VALIDATION_ERROR, 'Envía una imagen en el campo file', 422);
+    }
+    if (file.size > PRODUCT_IMAGE_MAX_BYTES) {
+      throw new AppError(ErrorCodes.INVALID_RANGE, 'La imagen supera 10 MB', 422);
+    }
+    const image = await processAttachmentFile(Buffer.from(await file.arrayBuffer()), file.name, { productImage: true });
+    return created(c, mapProduct(await addProductImage(id, image.buffer)));
+  }
+);
+
+productsRouter.delete('/:id/images', authJWT, rbacGuard, validateParams(productIdParamDto), async (c) => {
+  const id = getValidated(c, 'validatedParams', productIdParamDto).id;
+  const path = c.req.query('path');
+  if (!path) throw new AppError(ErrorCodes.VALIDATION_ERROR, 'Indica la ruta de la imagen', 422);
+  return ok(c, mapProduct(await deleteProductImage(id, path)));
+});
+
+productsRouter.patch(
+  '/:id/images', authJWT, rbacGuard, validateParams(productIdParamDto), validateBody(reorderProductImagesDto),
+  async (c) => {
+    const id = getValidated(c, 'validatedParams', productIdParamDto).id;
+    const { imagenes } = getValidated(c, 'validatedBody', reorderProductImagesDto);
+    return ok(c, mapProduct(await reorderProductImages(id, imagenes)));
   }
 );

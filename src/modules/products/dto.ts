@@ -59,79 +59,53 @@ export const LanguageEnum = z.enum([
 
 export const ProductTypeEnum = z.enum(['single', 'sellado', 'bundle', 'collection']);
 
-export const createProductDto = z
-  .object({
-    nombre: z.string().min(1).max(200),
-    descripcion: z.string().max(1000).optional(),
-    sku: z.string().max(50).regex(/^[A-Z0-9-]+$/).optional(),
-    juego: GameEnum.optional(),
-    set: z.string().optional(),
-    nro_coleccionista: z.string().optional(),
-    rareza: RarityEnum.optional(),
-    idioma: LanguageEnum.optional(),
-    condicion: ConditionEnum.optional(),
-    tipo: ProductTypeEnum.optional(),
-    precio: clpSchema.min(1),
-    precio_compra: clpSchema.optional(),
-    iva: z.number().int().min(0).max(100).default(19),
-    stock: z.number().int().min(0),
-    stockMinimo: z.number().int().min(0).max(2147483647).optional(),
-    categoria: z.string().min(1),
-    imagen: z.string().url().optional(),
-    imagenes: z.array(z.string().url()).optional(),
-    activo: z.boolean().default(true),
-  })
-  .refine(
-    (data) => {
-      if (data.tipo === 'single') {
-        return (
-          data.nro_coleccionista &&
-          data.rareza &&
-          data.condicion &&
-          data.idioma
-        );
-      }
-      return true;
-    },
-    {
-      message: 'Productos tipo "single" requieren: nro_coleccionista, rareza, condicion, idioma',
-    }
-  );
+export const singleCardFields = z.object({
+  nro_coleccionista: z.string().trim().min(1).max(50),
+  rareza: RarityEnum,
+  idioma: LanguageEnum,
+  condicion: ConditionEnum,
+});
 
-export const updateProductDto = z
-  .object({
-    nombre: z.string().min(1).max(200).optional(),
-    descripcion: z.string().max(1000).optional(),
-    sku: z.string().max(50).regex(/^[A-Z0-9-]+$/).optional(),
-    juego: GameEnum.optional(),
-    set: z.string().optional(),
-    nro_coleccionista: z.string().optional(),
-    nroColeccionista: z.string().optional(), // Alias para compatibilidad con frontend
-    rareza: RarityEnum.optional(),
-    idioma: LanguageEnum.optional(),
-    condicion: ConditionEnum.optional(),
-    tipo: ProductTypeEnum.optional(),
-    precio: clpSchema.min(1).optional(),
-    precio_compra: clpSchema.optional(),
-    iva: z.number().int().min(0).max(100).optional(),
-    stock: z.number().int().min(0).optional(),
-    stockMinimo: z.number().int().min(0).max(2147483647).optional(),
-    categoria: z.string().min(1).optional(),
-    imagen: z.string().url().optional(),
-    imagenes: z.array(z.string().url()).optional(),
-    activo: z.boolean().optional(),
-  })
-  .transform((data) => {
-    // Normalizar nroColeccionista a nro_coleccionista si viene en camelCase
-    if (data.nroColeccionista !== undefined && data.nro_coleccionista === undefined) {
-      return {
-        ...data,
-        nro_coleccionista: data.nroColeccionista,
-        nroColeccionista: undefined,
-      };
-    }
-    return data;
-  });
+const productFields = z.object({
+  nombre: z.string().trim().min(1).max(200),
+  descripcion: z.string().trim().max(1000).nullable().optional(),
+  sku: z.string().trim().max(50).regex(/^(?:[A-Z0-9-]+)?$/).optional(),
+  juego: GameEnum.nullable().optional(),
+  set: z.string().trim().nullable().optional(),
+  tipo: ProductTypeEnum,
+  precio: clpSchema.min(1).max(2147483647),
+  precio_compra: clpSchema.max(2147483647).nullable().optional(),
+  iva: z.number().int().min(0).max(100).optional(),
+  stockMinimo: z.number().int().min(0).max(2147483647).optional(),
+  categoria: z.string().trim().min(1),
+});
+
+// El tipo efectivo se valida en el servicio al editar, después de leer el producto.
+const incomingCardFields = z.object({
+  nro_coleccionista: z.unknown().optional(),
+  rareza: z.unknown().optional(),
+  idioma: z.unknown().optional(),
+  condicion: z.unknown().optional(),
+});
+
+export const createProductDto = productFields.extend({
+  tipo: ProductTypeEnum.default('sellado'),
+  stock: z.number().int().min(0).max(2147483647).default(0),
+  branchId: uuidSchema.optional(),
+  initialCost: clpSchema.max(2147483647).optional(),
+  activo: z.boolean().default(true),
+}).merge(incomingCardFields).superRefine((data, ctx) => {
+  if (data.tipo !== 'single') return;
+  const result = singleCardFields.safeParse(data);
+  if (!result.success) result.error.issues.forEach(issue => ctx.addIssue(issue));
+});
+
+export const updateProductDto = productFields.partial().merge(incomingCardFields)
+  .extend({ nroColeccionista: z.unknown().optional() });
+
+export const reorderProductImagesDto = z.object({
+  imagenes: z.array(z.string().min(1)).max(4),
+});
 
 export const listProductsQueryDto = z.object({
   page: z.string().optional(),

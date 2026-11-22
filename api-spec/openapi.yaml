@@ -2086,7 +2086,7 @@ components:
         set:
           type: string
           nullable: true
-        nro_coleccionista:
+        nroColeccionista:
           type: string
           nullable: true
         rareza:
@@ -2101,7 +2101,7 @@ components:
           type: integer
           format: int64
           description: Precio en CLP en pesos enteros
-        precio_compra:
+        precioCompra:
           type: integer
           format: int64
           nullable: true
@@ -2117,13 +2117,15 @@ components:
           type: string
         imagen:
           type: string
-          format: uri
+          format: uri-reference
+          description: Primera imagen de la galería.
           nullable: true
         imagenes:
           type: array
+          description: Galería ordenada. Las imágenes nuevas tienen rutas relativas /media/products/{id}/{uuid}.webp.
           items:
             type: string
-            format: uri
+            format: uri-reference
         stock_sucursales:
           type: object
           additionalProperties:
@@ -2139,10 +2141,10 @@ components:
 
     CreateProductRequest:
       type: object
+      description: Las cartas individuales requieren número de coleccionista, rareza, idioma y condición.
       required:
         - nombre
         - precio
-        - stock
         - categoria
       properties:
         nombre:
@@ -2155,8 +2157,77 @@ components:
         sku:
           type: string
           maxLength: 50
-          pattern: '^[A-Z0-9-]+$'
+          pattern: '^[A-Z0-9-]*$'
+          description: Se genera cuando se omite o se envía vacío.
+        juego:
+          $ref: '#/components/schemas/Game'
+        set:
+          type: string
           nullable: true
+        nro_coleccionista:
+          type: string
+          nullable: true
+        rareza:
+          $ref: '#/components/schemas/Rarity'
+        idioma:
+          $ref: '#/components/schemas/Language'
+        condicion:
+          $ref: '#/components/schemas/Condition'
+        tipo:
+          allOf:
+            - $ref: '#/components/schemas/ProductType'
+          default: sellado
+        precio:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Precio en CLP en pesos enteros
+        precio_compra:
+          type: integer
+          format: int64
+          nullable: true
+        iva:
+          type: integer
+          minimum: 0
+          maximum: 100
+          default: 19
+          description: Porcentaje de IVA
+        stockMinimo: { type: integer, minimum: 0, maximum: 2147483647, default: 0 }
+        stock:
+          type: integer
+          minimum: 0
+          default: 0
+        branchId:
+          type: string
+          format: uuid
+          description: Sucursal activa para el stock inicial. Por compatibilidad se usa la sucursal del usuario si se omite.
+        initialCost:
+          type: integer
+          minimum: 0
+          maximum: 2147483647
+          description: Si hay stock inicial, reemplaza el precio de compra.
+        categoria:
+          type: string
+        activo:
+          type: boolean
+          default: true
+
+    UpdateProductRequest:
+      type: object
+      description: Actualización parcial. El tipo efectivo determina los campos de carta. El stock se cambia mediante ajustes.
+      properties:
+        nombre:
+          type: string
+          maxLength: 200
+        descripcion:
+          type: string
+          maxLength: 1000
+          nullable: true
+        sku:
+          type: string
+          maxLength: 50
+          pattern: '^[A-Z0-9-]*$'
+          description: Un SKU vacío conserva el valor actual.
         juego:
           $ref: '#/components/schemas/Game'
         set:
@@ -2186,47 +2257,9 @@ components:
           type: integer
           minimum: 0
           maximum: 100
-          default: 19
           description: Porcentaje de IVA
-        stockMinimo: { type: integer, minimum: 0, maximum: 2147483647, default: 0 }
-        stock:
-          type: integer
-          minimum: 0
+        stockMinimo: { type: integer, minimum: 0, maximum: 2147483647 }
         categoria:
-          type: string
-        imagen:
-          type: string
-          format: uri
-          nullable: true
-        imagenes:
-          type: array
-          items:
-            type: string
-            format: uri
-          nullable: true
-        activo:
-          type: boolean
-          default: true
-
-    UpdateProductRequest:
-      type: object
-      properties:
-        nombre:
-          type: string
-        descripcion:
-          type: string
-        precio:
-          type: integer
-          format: int64
-        stockMinimo: { type: integer, minimum: 0, maximum: 2147483647, default: 0 }
-        stock:
-          type: integer
-        categoria:
-          type: string
-        imagen:
-          type: string
-          format: uri
-        sku:
           type: string
 
     # --- Admin (panel /api/admin) — formas expuestas al frontend ---
@@ -3059,7 +3092,7 @@ paths:
     post:
       tags: [products]
       summary: Crear producto
-      description: El stock inicial se registra en la sucursal del usuario autenticado.
+      description: El stock inicial se registra como ajuste en la sucursal elegida.
       requestBody:
         required: true
         content:
@@ -3179,7 +3212,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Product'
         '409':
-          description: Stock insuficiente en la sucursal de origen o de ajuste
+          $ref: '#/components/responses/Conflict'
         '404':
           $ref: '#/components/responses/NotFound'
         '422':
@@ -3258,6 +3291,121 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+
+  /products/stock-branches:
+    get:
+      tags: [products]
+      summary: Listar sucursales activas para el stock inicial
+      description: Requiere products.create.
+      responses:
+        '200':
+          description: Sucursales activas
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id: { type: string, format: uuid }
+                    nombre: { type: string }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /products/{id}/images:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer }
+    post:
+      tags: [products]
+      summary: Subir una imagen
+      description: Requiere products.edit. Admite hasta cuatro imágenes JPEG, PNG, WebP o GIF por producto, de hasta 10 MB por archivo.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        '201':
+          description: Producto con la imagen agregada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Error422'
+        '413':
+          description: Solicitud multipart demasiado grande
+    delete:
+      tags: [products]
+      summary: Eliminar una imagen
+      description: Requiere products.edit.
+      parameters:
+        - name: path
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Producto con la galería actualizada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Error422'
+    patch:
+      tags: [products]
+      summary: Reordenar las imágenes
+      description: Requiere products.edit. Envía todas las rutas actuales en el orden deseado. La primera pasa a ser la imagen principal.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [imagenes]
+              properties:
+                imagenes:
+                  type: array
+                  maxItems: 4
+                  uniqueItems: true
+                  items: { type: string }
+      responses:
+        '200':
+          description: Producto con la galería reordenada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Error422'
 
   /products/{id}/stock:
     patch:

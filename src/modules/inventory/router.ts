@@ -1,3 +1,4 @@
+import { updateProductDto } from '../products/dto.js';
 import { legacyLowStock } from './alerts-router.js';
 import { Hono } from 'hono';
 import { authJWT, getAuthUser } from '../../middlewares/auth-jwt.js';
@@ -196,15 +197,16 @@ inventoryRouter.put(
   authJWT,
   rbacGuard,
   validateParams(inventoryIdParamDto),
+  validateBody(updateProductDto),
   async (c) => {
     // Por ahora, este endpoint actualiza el producto
     // En el futuro podría actualizar StockByBranch específico
     const params = getValidated(c, 'validatedParams', inventoryIdParamDto);
-    const body = await c.req.json();
+    const body = getValidated(c, 'validatedBody', updateProductDto);
     
     // Importar productService para actualizar
     const { productService } = await import('../products/service.js');
-    const updated = await productService.update(params.id, body, getAuthUser(c).userId);
+    const updated = await productService.update(params.id, body);
     return ok(c, mapProduct(updated));
   }
 );

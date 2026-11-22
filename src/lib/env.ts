@@ -15,6 +15,7 @@ export const env = {
   S3_ACCESS_KEY_ID: process.env.S3_ACCESS_KEY_ID || '',
   S3_SECRET_ACCESS_KEY: process.env.S3_SECRET_ACCESS_KEY || '',
   S3_REGION: process.env.S3_REGION || 'auto',
+  MEDIA_DIR: process.env.MEDIA_DIR || './media',
   ATTACHMENTS_MAX_BYTES: parseInt(process.env.ATTACHMENTS_MAX_BYTES || '10485760', 10),
   /** `s3` (R2) o `memory` (en disco para dev local, en memoria para test) */
   ATTACHMENTS_STORAGE: (process.env.ATTACHMENTS_STORAGE || 's3') as 's3' | 'memory',
