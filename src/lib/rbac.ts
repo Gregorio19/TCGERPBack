@@ -1,10 +1,6 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { fileURLToPath } from 'url';
-import { dirname } from 'path';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
 
 interface RBACConfig {
   roles: Record<string, {
@@ -19,7 +15,7 @@ let rbacConfig: RBACConfig | null = null;
 
 const loadRBAC = (): RBACConfig => {
   if (!rbacConfig) {
-    const rbacPath = join(__dirname, '../../api-spec/rbac.json');
+    const rbacPath = join(process.cwd(), 'api-spec/rbac.json');
     const content = readFileSync(rbacPath, 'utf-8');
     rbacConfig = JSON.parse(content) as RBACConfig;
   }

@@ -2,12 +2,12 @@
   "name": "tcg-erp-api",
   "version": "1.0.0",
   "description": "TCG ERP API - Node.js + Hono + Prisma + Postgres",
-  "main": "dist/server.js",
+  "main": "dist/src/server.js",
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "build": "tsc",
-    "start": "node dist/server.js",
+    "build": "rm -rf dist && tsc",
+    "start": "node dist/src/server.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
@@ -19,7 +19,8 @@
     "test:admin": "tsx --test src/modules/admin/admin.integration.test.ts",
     "test:dashboard": "tsx --test src/modules/dashboard/dashboard.integration.test.ts",
     "test:customers": "tsx --test src/modules/customers/customers.integration.test.ts src/modules/customers/attachments.integration.test.ts src/modules/customers/visit-attachments.integration.test.ts",
-    "test:integration": "tsx --test src/modules/hr/hr.integration.test.ts src/modules/admin/admin.integration.test.ts src/modules/dashboard/dashboard.integration.test.ts src/modules/customers/customers.integration.test.ts src/modules/customers/attachments.integration.test.ts src/modules/customers/visit-attachments.integration.test.ts"
+    "test:integration": "tsx --test src/modules/hr/hr.integration.test.ts src/modules/admin/admin.integration.test.ts src/modules/dashboard/dashboard.integration.test.ts src/modules/customers/customers.integration.test.ts src/modules/customers/attachments.integration.test.ts src/modules/customers/visit-attachments.integration.test.ts",
+    "db:seed:prod": "node dist/prisma/seed.js"
   },
   "keywords": [
     "tcg",

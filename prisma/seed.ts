@@ -1,11 +1,8 @@
 import { PrismaClient } from '@prisma/client';
 import { readFileSync } from 'fs';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
+import { join } from 'path';
 import { hashPassword } from '../src/lib/auth.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
 
 const prisma = new PrismaClient();
 
@@ -20,7 +17,7 @@ type CanonicalCatalog = {
 };
 
 function loadPermissionsCanonical(): CanonicalCatalog {
-  const path = join(__dirname, '../api-spec/permissions-canonical.json');
+  const path = join(process.cwd(), 'api-spec/permissions-canonical.json');
   const raw = JSON.parse(readFileSync(path, 'utf-8')) as CanonicalCatalog & Record<string, unknown>;
   if (!Array.isArray(raw.permissions)) {
     throw new Error('permissions-canonical.json: falta array "permissions"');
@@ -71,8 +68,13 @@ async function seedPermissionsCatalog() {
 async function main() {
   console.log('🌱 Iniciando seed...');
 
-  const seedsPath = join(__dirname, '../api-spec/seeds.json');
+  const seedsPath = join(process.cwd(), 'api-spec/seeds.json');
   const seeds = JSON.parse(readFileSync(seedsPath, 'utf-8'));
+  const isProd = process.env.NODE_ENV === 'production';
+  const adminPassword = process.env.SEED_ADMIN_PASSWORD ?? (isProd ? '' : 'password123');
+  if (!adminPassword) throw new Error('En producción define SEED_ADMIN_PASSWORD para el usuario admin');
+  // En producción solo configuración: sin proveedores, productos, clientes ni empleados de ejemplo.
+  if (isProd) Object.assign(seeds, { proveedores: [], products: [], customers: [], employees: [] });
 
   // 1. Branches (primero porque otros recursos dependen de ellas)
   console.log('📦 Creando sucursales...');
@@ -120,7 +122,7 @@ async function main() {
   // 3. Users (depende de branches y roles)
   console.log('👤 Creando usuarios...');
   for (const user of seeds.users) {
-    const passwordHash = await hashPassword('password123'); // Contraseña por defecto
+    const passwordHash = await hashPassword(adminPassword);
 
     const createdUser = await prisma.user.upsert({
       where: { id: user.id },

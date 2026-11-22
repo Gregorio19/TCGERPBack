@@ -1,16 +1,13 @@
 import { Hono } from 'hono';
 import { readFileSync } from 'fs';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
+import { join } from 'path';
 import { parse } from 'yaml';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
 
 export const docsRouter = new Hono();
 
 // Leer el archivo openapi.yaml
-const openapiPath = join(__dirname, '../../../api-spec/openapi.yaml');
+const openapiPath = join(process.cwd(), 'api-spec/openapi.yaml');
 const openapiSpecYaml = readFileSync(openapiPath, 'utf-8');
 const openapiSpecJson = parse(openapiSpecYaml);
 
