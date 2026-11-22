@@ -12,6 +12,7 @@ import {
   createProductDto,
   updateProductDto,
   listProductsQueryDto,
+  lookupProductQueryDto,
   productIdParamDto,
   reorderProductImagesDto,
   updateStockDto,
@@ -86,6 +87,11 @@ productsRouter.get('/stock-branches', authJWT, rbacGuard, async (c) => {
 
 // Productos con stock bajo
 productsRouter.get('/low-stock', authJWT, rbacGuard, legacyLowStock);
+
+productsRouter.get('/lookup', authJWT, rbacGuard, validateQuery(lookupProductQueryDto), async (c) => {
+  const { code, branchId } = getValidated(c, 'validatedQuery', lookupProductQueryDto);
+  return ok(c, mapProduct(await productService.lookup(code, branchId)));
+});
 
 // Obtener producto por ID
 productsRouter.get(

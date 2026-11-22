@@ -163,3 +163,45 @@ it('pagina productos y busca por nombre o SKU fuera de la primera página', asyn
   const body = await invalid.json() as { error: { details: { field: string }[] } };
   assert.equal(body.error.details[0].field, 'precio');
 });
+
+it('valida el EAN y busca productos activos por EAN o SKU exacto', async t => {
+  const token = randomUUID();
+  const categoria = `test-ean-${token}`;
+  const sku = `EAN-${token.toUpperCase()}`;
+  const ean = `0${BigInt(`0x${token.replaceAll('-', '')}`) % 1_000_000_000_000n}`.padEnd(13, '0');
+  t.after(() => db.product.deleteMany({ where: { categoria } }));
+
+  const path = '/api/products';
+  const base = { nombre: 'Caja sellada', precio: 35000, categoria };
+  const create = (data: object) => jsonRequest(path, 'POST', { ...base, ...data });
+  const lookup = (code: string) => requestAsAdmin(`${path}/lookup?code=${encodeURIComponent(code)}`);
+
+  for (const invalid of ['1234567', '123456789012345', '1234567X', 12345678]) {
+    assert.equal((await create({ ean: invalid })).status, 422);
+  }
+  const product = await expectProduct(await create({ ean, sku }), 201);
+  assert.equal(product.ean, ean);
+  const duplicate = await create({ ean });
+  assert.equal(duplicate.status, 409);
+  assert.match(await duplicate.text(), /DUPLICATE_EAN/);
+
+  const without = await expectProduct(await create({ ean: '' }), 201);
+  assert.equal(without.ean, null);
+  assert.equal((await jsonRequest(`${path}/${without.id}`, 'PUT', { ean })).status, 409);
+  assert.equal((await jsonRequest(`${path}/${product.id}`, 'PUT', { ean: '1234 ABC' })).status, 422);
+  assert.equal((await expectProduct(await lookup(ean), 200)).id, product.id);
+  assert.equal((await expectProduct(await lookup(sku.toLowerCase()), 200)).id, product.id);
+  assert.equal((await lookup(sku.slice(0, -1) + '_')).status, 404);
+
+  const search = await requestAsAdmin(`${path}?search=${ean}`);
+  assert.equal(search.status, 200);
+  const result = await search.json() as PaginatedResult<Product>;
+  assert.ok(result.data.some(item => item.id === product.id));
+
+  const cleared = await expectProduct(
+    await jsonRequest(`${path}/${product.id}`, 'PUT', { ean: ' ' }), 200
+  );
+  assert.equal(cleared.ean, null);
+  await expectProduct(await create({ ean, activo: false }), 201);
+  assert.equal((await lookup(ean)).status, 404);
+});

@@ -6,6 +6,7 @@ type RoutePermission = string | typeof AUTHENTICATED_ONLY;
 export const routePermissions: ReadonlyMap<string, RoutePermission> = new Map<string, RoutePermission>([
   // products
   ['GET /api/products', 'products.view'],
+  ['GET /api/products/lookup', 'products.view'],
   ['GET /api/products/inactive', 'products.view'],
   ['POST /api/products', 'products.create'],
   ['GET /api/products/stats', 'products.view'],

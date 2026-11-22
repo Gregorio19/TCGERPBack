@@ -2069,6 +2069,14 @@ components:
         - categoria
         - activo
       properties:
+        ean:
+          type: string
+          nullable: true
+          pattern: '^[0-9]{8,14}$'
+        stockSucursal:
+          type: integer
+          minimum: 0
+          description: Saldo de la sucursal cuando se envía branchId al lookup.
         id:
           type: integer
           format: int64
@@ -2222,6 +2230,11 @@ components:
         - precio
         - categoria
       properties:
+        ean:
+          type: string
+          nullable: true
+          pattern: '^([0-9]{8,14})?$'
+          description: Código de barras único. Una cadena vacía se guarda como null.
         nombre:
           type: string
           maxLength: 200
@@ -2291,6 +2304,11 @@ components:
       type: object
       description: Actualización parcial. El tipo efectivo determina los campos de carta. El stock se cambia mediante ajustes.
       properties:
+        ean:
+          type: string
+          nullable: true
+          pattern: '^([0-9]{8,14})?$'
+          description: Código de barras único. Una cadena vacía se guarda como null.
         nombre:
           type: string
           maxLength: 200
@@ -3120,6 +3138,7 @@ paths:
     get:
       tags: [products]
       summary: Listar productos
+      description: El filtro search también busca por código de barras (EAN).
       parameters:
         - $ref: '#/components/parameters/page'
         - $ref: '#/components/parameters/pageSize'
@@ -3240,6 +3259,40 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+
+  /products/lookup:
+    get:
+      tags: [products]
+      summary: Buscar un producto activo por EAN o SKU exacto
+      description: El EAN tiene prioridad. El SKU se compara sin distinguir mayúsculas y minúsculas.
+      parameters:
+        - name: code
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+        - name: branchId
+          in: query
+          description: Sucursal para obtener el saldo de stockSucursal.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Producto encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: Código sin coincidencias activas
+        '422':
+          description: Parámetros de búsqueda inválidos
 
   /products/{id}:
     get:

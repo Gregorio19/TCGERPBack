@@ -18,6 +18,7 @@ export const mapProduct = (product: any) => {
   const imagenes = productImagePaths(product);
   return {
     ...product,
+    ean: product.ean ?? null,
     imagenes,
     imagen: imagenes[0] ?? null,
     createdAt: toISOString(product.createdAt),

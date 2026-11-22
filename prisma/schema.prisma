@@ -184,6 +184,7 @@ model Product {
   nombre          String       @db.VarChar(200)
   descripcion     String?      @db.VarChar(1000)
   sku             String?      @unique @db.VarChar(50)
+  ean             String?      @unique @db.VarChar(20)
   juego           Game?
   set             String?
   nroColeccionista String?     @map("nro_coleccionista") @db.VarChar(50)

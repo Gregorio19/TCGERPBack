@@ -59,8 +59,11 @@ function generateSku(name: string) {
   return `${prefix || 'PROD'}-${randomUUID().slice(0, 6).toUpperCase()}`;
 }
 
-function handleDuplicateSku(error: unknown) {
+function handleDuplicateProductCode(error: unknown) {
   if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+    if (Array.isArray(error.meta?.target) && error.meta.target.includes('ean')) {
+      throw new AppError(ErrorCodes.DUPLICATE_EAN, 'Ya existe un producto con ese código de barras (EAN)', 409);
+    }
     throw new AppError(ErrorCodes.DUPLICATE_SKU, 'Ya existe un producto con ese SKU', 409);
   }
   throw error;
@@ -90,6 +93,7 @@ export const productService = {
         { nombre: { contains: search, mode: 'insensitive' } },
         { descripcion: { contains: search, mode: 'insensitive' } },
         { sku: { contains: search, mode: 'insensitive' } },
+        { ean: { contains: search } },
         { set: { contains: search, mode: 'insensitive' } },
         { nroColeccionista: { contains: search, mode: 'insensitive' } },
         { categoria: { contains: search, mode: 'insensitive' } },
@@ -177,6 +181,7 @@ export const productService = {
         { nombre: { contains: search, mode: 'insensitive' } },
         { descripcion: { contains: search, mode: 'insensitive' } },
         { sku: { contains: search, mode: 'insensitive' } },
+        { ean: { contains: search } },
         { set: { contains: search, mode: 'insensitive' } },
         { nroColeccionista: { contains: search, mode: 'insensitive' } },
         { categoria: { contains: search, mode: 'insensitive' } },
@@ -241,6 +246,26 @@ export const productService = {
     return buildPaginatedResponse(data, total, page, pageSize);
   },
 
+  async lookup(code: string, branchId?: string) {
+    const active = { activo: true, deletedAt: null };
+    // Prisma usa ILIKE en modo insensible. Escapa los comodines para una coincidencia literal.
+    const sku = code.replace(/[\\%_]/g, '\\$&');
+    const product = await db.product.findFirst({ where: { ...active, ean: code } })
+      ?? await db.product.findFirst({
+        where: { ...active, sku: { equals: sku, mode: 'insensitive' } },
+        orderBy: { id: 'asc' },
+      });
+    if (!product) {
+      throw new AppError(ErrorCodes.PRODUCT_NOT_FOUND, 'No se encontró un producto activo con ese EAN o SKU', 404);
+    }
+    if (!branchId) return product;
+    const branchStock = await db.stockByBranch.findUnique({
+      where: { productId_branchId: { productId: product.id, branchId } },
+      select: { cantidad: true },
+    });
+    return { ...product, stockSucursal: branchStock?.cantidad ?? 0 };
+  },
+
   async getById(id: number) {
     const product = await db.product.findFirst({
       where: {
@@ -264,6 +289,7 @@ export const productService = {
           nombre: data.nombre,
           descripcion: data.descripcion || null,
           sku: data.sku || generateSku(data.nombre),
+          ean: data.ean,
           juego: data.juego,
           set: data.set || null,
           ...(data.tipo === 'single' ? cardData(data) : emptyCard),
@@ -289,7 +315,7 @@ export const productService = {
         reason: 'Stock inicial',
       });
       return result.product;
-    }).catch(handleDuplicateSku);
+    }).catch(handleDuplicateProductCode);
   },
 
   async update(id: number, data: z.output<typeof updateProductDto>) {
@@ -318,6 +344,7 @@ export const productService = {
           nombre: data.nombre,
           descripcion: data.descripcion === '' ? null : data.descripcion,
           sku: data.sku || undefined,
+          ean: data.ean,
           juego: data.juego,
           set: data.set === '' ? null : data.set,
           ...card,
@@ -329,7 +356,7 @@ export const productService = {
           categoria: data.categoria,
         },
       });
-    }).catch(handleDuplicateSku);
+    }).catch(handleDuplicateProductCode);
   },
 
   async delete(id: number) {

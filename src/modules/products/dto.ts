@@ -70,6 +70,9 @@ const productFields = z.object({
   nombre: z.string().trim().min(1).max(200),
   descripcion: z.string().trim().max(1000).nullable().optional(),
   sku: z.string().trim().max(50).regex(/^(?:[A-Z0-9-]+)?$/).optional(),
+  ean: z.string().trim()
+    .regex(/^(?:[0-9]{8,14})?$/, 'El EAN debe tener entre 8 y 14 dígitos')
+    .transform(value => value || null).nullable().optional(),
   juego: GameEnum.nullable().optional(),
   set: z.string().trim().nullable().optional(),
   tipo: ProductTypeEnum,
@@ -126,6 +129,11 @@ export const listProductsQueryDto = z.object({
   precioMax: z.string().optional(),
   stockDisponible: z.string().optional(),
   stockMinimo: z.string().optional(), // Alias para stockDisponible solicitado por frontend
+});
+
+export const lookupProductQueryDto = z.object({
+  code: z.string().trim().min(1),
+  branchId: uuidSchema.optional(),
 });
 
 export const productIdParamDto = z.object({
