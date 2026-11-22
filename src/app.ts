@@ -18,8 +18,10 @@ app.use('*', corsMiddleware);
 
 // Error handler debe estar al final para capturar errores de todos los middlewares y rutas
 app.onError((err, c) => {
-  // Log del error completo para debugging
-  if (err instanceof Error) {
+  // Errores de cliente (4xx) como warn y sin stack: evita llenar el log con fuerza bruta
+  if (err instanceof AppError && err.statusCode < 500) {
+    logger.warn(`${err.statusCode} ${err.code}: ${err.message}`);
+  } else if (err instanceof Error) {
     logger.error('Error:', {
       message: err.message,
       stack: err.stack,
