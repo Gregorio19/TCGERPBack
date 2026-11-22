@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { authJWT, optionalAuth } from '../../middlewares/auth-jwt.js';
+import { authJWT } from '../../middlewares/auth-jwt.js';
 import { rbacGuard } from '../../middlewares/rbac-guard.js';
 import { validateBody, validateQuery, validateParams } from '../../lib/validation.js';
 import {
@@ -19,7 +19,7 @@ export const ordersRouter = new Hono();
 // Listar órdenes
 ordersRouter.get(
   '/',
-  optionalAuth,
+  authJWT,
   validateQuery(listOrdersQueryDto),
   async (c) => {
     const query = (c as any).get('validatedQuery') as z.infer<typeof listOrdersQueryDto>;
@@ -70,7 +70,7 @@ ordersRouter.post(
 // Obtener orden por ID
 ordersRouter.get(
   '/:id',
-  optionalAuth,
+  authJWT,
   validateParams(orderIdParamDto),
   async (c) => {
     const params = (c as any).get('validatedParams') as { id: string };
@@ -110,7 +110,7 @@ ordersRouter.delete(
 // Timeline de eventos de orden
 ordersRouter.get(
   '/:id/timeline',
-  optionalAuth,
+  authJWT,
   validateParams(orderIdParamDto),
   async (c) => {
     const { id } = (c as any).get('validatedParams') as { id: string };

@@ -1,5 +1,5 @@
 import { Hono, type Context } from 'hono';
-import { authJWT, optionalAuth } from '../../middlewares/auth-jwt.js';
+import { authJWT } from '../../middlewares/auth-jwt.js';
 import { rbacGuard } from '../../middlewares/rbac-guard.js';
 import { validateBody, validateQuery, validateParams } from '../../lib/validation.js';
 import {
@@ -64,7 +64,7 @@ export const customersRouter = new Hono();
 // Listar clientes
 customersRouter.get(
   '/',
-  optionalAuth,
+  authJWT,
   validateQuery(listCustomersQueryDto),
   async (c) => {
     const query = (c as any).get('validatedQuery') as z.infer<typeof listCustomersQueryDto>;
@@ -113,7 +113,7 @@ customersRouter.post(
 // Historial de visitas / notas (antes de GET /:id por convención de rutas)
 customersRouter.get(
   '/:id/visits',
-  optionalAuth,
+  authJWT,
   validateParams(customerIdParamDto),
   validateQuery(listCustomerVisitsQueryDto),
   async (c) => {
@@ -168,7 +168,7 @@ customersRouter.patch(
 // Adjuntos por visita (antes de adjuntos por cliente)
 customersRouter.get(
   '/:id/visits/:visitId/attachments',
-  optionalAuth,
+  authJWT,
   validateParams(customerVisitIdParamDto),
   validateQuery(listCustomerVisitAttachmentsQueryDto),
   async (c) => {
@@ -281,7 +281,7 @@ customersRouter.delete(
 // Adjuntos por cliente (antes de GET /:id)
 customersRouter.get(
   '/:id/attachments',
-  optionalAuth,
+  authJWT,
   validateParams(customerIdParamDto),
   validateQuery(listCustomerAttachmentsQueryDto),
   async (c) => {
@@ -384,7 +384,7 @@ customersRouter.delete(
 // Obtener cliente por ID
 customersRouter.get(
   '/:id',
-  optionalAuth,
+  authJWT,
   validateParams(customerIdParamDto),
   async (c) => {
     const params = (c as any).get('validatedParams') as { id: string };
@@ -424,7 +424,7 @@ customersRouter.delete(
 // Órdenes de un cliente
 customersRouter.get(
   '/:id/orders',
-  optionalAuth,
+  authJWT,
   validateParams(customerIdParamDto),
   async (c) => {
     const { id } = (c as any).get('validatedParams') as { id: string };
@@ -436,7 +436,7 @@ customersRouter.get(
 // Estadísticas de cliente
 customersRouter.get(
   '/:id/stats',
-  optionalAuth,
+  authJWT,
   validateParams(customerIdParamDto),
   async (c) => {
     const { id } = (c as any).get('validatedParams') as { id: string };

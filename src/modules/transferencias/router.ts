@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { authJWT, optionalAuth } from '../../middlewares/auth-jwt.js';
+import { authJWT } from '../../middlewares/auth-jwt.js';
 import { rbacGuard } from '../../middlewares/rbac-guard.js';
 import { validateBody, validateQuery, validateParams } from '../../lib/validation.js';
 import {
@@ -17,7 +17,7 @@ export const transferenciasRouter = new Hono();
 
 transferenciasRouter.get(
   '/',
-  optionalAuth,
+  authJWT,
   validateQuery(listTransferenciasQueryDto),
   async (c) => {
     const query = (c as any).get('validatedQuery') as z.infer<typeof listTransferenciasQueryDto>;
@@ -55,7 +55,7 @@ transferenciasRouter.post(
 
 transferenciasRouter.get(
   '/:id',
-  optionalAuth,
+  authJWT,
   validateParams(transferIdParamDto),
   async (c) => {
     const { id } = (c as any).get('validatedParams') as { id: string };

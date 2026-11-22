@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { authJWT, optionalAuth } from '../../middlewares/auth-jwt.js';
+import { authJWT } from '../../middlewares/auth-jwt.js';
 import { rbacGuard } from '../../middlewares/rbac-guard.js';
 import { validateBody } from '../../lib/validation.js';
 import { ok, created } from '../../lib/responses.js';
@@ -26,7 +26,7 @@ const posSaleDto = z.object({
     .min(1),
 });
 
-posRouter.get('/products', optionalAuth, async (c) => {
+posRouter.get('/products', authJWT, async (c) => {
   const result = await productService.list({
     page: 1,
     pageSize: 100,

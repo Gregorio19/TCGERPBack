@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { authJWT, optionalAuth } from '../../middlewares/auth-jwt.js';
+import { authJWT } from '../../middlewares/auth-jwt.js';
 import { rbacGuard } from '../../middlewares/rbac-guard.js';
 import { validateBody, validateQuery, validateParams } from '../../lib/validation.js';
 import {
@@ -20,7 +20,7 @@ export const productsRouter = new Hono();
 // Listar productos (público o autenticado)
 productsRouter.get(
   '/',
-  optionalAuth,
+  authJWT,
   validateQuery(listProductsQueryDto),
   async (c) => {
     const query = (c as any).get('validatedQuery') as z.infer<typeof listProductsQueryDto>;
@@ -109,7 +109,7 @@ productsRouter.post(
 // Obtener producto por ID
 productsRouter.get(
   '/:id',
-  optionalAuth,
+  authJWT,
   validateParams(productIdParamDto),
   async (c) => {
     const params = (c as any).get('validatedParams') as { id: number };
@@ -164,19 +164,19 @@ productsRouter.patch(
 );
 
 // Estadísticas
-productsRouter.get('/stats', optionalAuth, async (c) => {
+productsRouter.get('/stats', authJWT, async (c) => {
   const stats = await productService.getStats();
   return ok(c, stats);
 });
 
 // Categorías
-productsRouter.get('/categories', optionalAuth, async (c) => {
+productsRouter.get('/categories', authJWT, async (c) => {
   const categories = await productService.getCategories();
   return ok(c, categories);
 });
 
 // Productos con stock bajo
-productsRouter.get('/low-stock', optionalAuth, async (c) => {
+productsRouter.get('/low-stock', authJWT, async (c) => {
   const threshold = parseInt(c.req.query('threshold') || '10', 10);
   const products = await productService.getLowStock(threshold);
   return ok(c, products.map(mapProduct));

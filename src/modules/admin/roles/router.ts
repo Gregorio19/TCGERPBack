@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { authJWT, optionalAuth } from '../../../middlewares/auth-jwt.js';
+import { authJWT } from '../../../middlewares/auth-jwt.js';
 import { rbacGuard } from '../../../middlewares/rbac-guard.js';
 import { validateBody, validateQuery, validateParams } from '../../../lib/validation.js';
 import {
@@ -18,7 +18,7 @@ export const rolesRouter = new Hono();
 
 rolesRouter.get(
   '/',
-  optionalAuth,
+  authJWT,
   validateQuery(listRolesQueryDto),
   async (c) => {
     const query = (c as any).get('validatedQuery') as z.infer<typeof listRolesQueryDto>;
@@ -69,7 +69,7 @@ rolesRouter.put(
 
 rolesRouter.get(
   '/:id',
-  optionalAuth,
+  authJWT,
   validateParams(roleIdParamDto),
   async (c) => {
     const { id } = (c as any).get('validatedParams') as { id: string };

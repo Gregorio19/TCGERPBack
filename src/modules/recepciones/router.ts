@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { authJWT, optionalAuth } from '../../middlewares/auth-jwt.js';
+import { authJWT } from '../../middlewares/auth-jwt.js';
 import { rbacGuard } from '../../middlewares/rbac-guard.js';
 import { validateBody, validateQuery, validateParams } from '../../lib/validation.js';
 import {
@@ -18,7 +18,7 @@ export const recepcionesRouter = new Hono();
 // Listar recepciones
 recepcionesRouter.get(
   '/',
-  optionalAuth,
+  authJWT,
   validateQuery(listRecepcionesQueryDto),
   async (c) => {
     const query = (c as any).get('validatedQuery') as z.infer<typeof listRecepcionesQueryDto>;
@@ -60,7 +60,7 @@ recepcionesRouter.post(
 // Obtener recepción por ID
 recepcionesRouter.get(
   '/:id',
-  optionalAuth,
+  authJWT,
   validateParams(receptionIdParamDto),
   async (c) => {
     const { id } = (c as any).get('validatedParams') as { id: string };

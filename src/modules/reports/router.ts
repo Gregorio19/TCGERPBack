@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { authJWT, optionalAuth } from '../../middlewares/auth-jwt.js';
+import { authJWT } from '../../middlewares/auth-jwt.js';
 import { rbacGuard } from '../../middlewares/rbac-guard.js';
 import { validateBody, validateQuery, validateParams } from '../../lib/validation.js';
 import { ok, noContent, created } from '../../lib/responses.js';
@@ -34,15 +34,15 @@ const exportQueryDto = z.object({
   formato: z.string().optional(),
 });
 
-reportsRouter.get('/types', optionalAuth, async (c) => {
+reportsRouter.get('/types', authJWT, async (c) => {
   return ok(c, reportsService.types());
 });
 
-reportsRouter.get('/stats', optionalAuth, async (c) => {
+reportsRouter.get('/stats', authJWT, async (c) => {
   return ok(c, await reportsService.stats());
 });
 
-reportsRouter.get('/recent', optionalAuth, validateQuery(recentQueryDto), async (c) => {
+reportsRouter.get('/recent', authJWT, validateQuery(recentQueryDto), async (c) => {
   const q = (c as { get: (k: string) => unknown }).get('validatedQuery') as z.infer<typeof recentQueryDto>;
   const limit = q.limit ? parseInt(q.limit, 10) : 10;
   return ok(c, await reportsService.recent(Number.isFinite(limit) ? limit : 10));
@@ -50,7 +50,7 @@ reportsRouter.get('/recent', optionalAuth, validateQuery(recentQueryDto), async 
 
 reportsRouter.get(
   '/export/:id',
-  optionalAuth,
+  authJWT,
   validateParams(idParamDto),
   validateQuery(exportQueryDto),
   async (c) => {
@@ -70,7 +70,7 @@ reportsRouter.post('/generate', authJWT, rbacGuard, validateBody(generateDto), a
   return created(c, row);
 });
 
-reportsRouter.get('/', optionalAuth, validateQuery(listQueryDto), async (c) => {
+reportsRouter.get('/', authJWT, validateQuery(listQueryDto), async (c) => {
   const q = (c as { get: (k: string) => unknown }).get('validatedQuery') as z.infer<typeof listQueryDto>;
   const queryRecord: Record<string, string | undefined> = {
     page: q.page,
@@ -81,7 +81,7 @@ reportsRouter.get('/', optionalAuth, validateQuery(listQueryDto), async (c) => {
   return ok(c, await reportsService.list(queryRecord));
 });
 
-reportsRouter.get('/:id', optionalAuth, validateParams(idParamDto), async (c) => {
+reportsRouter.get('/:id', authJWT, validateParams(idParamDto), async (c) => {
   const { id } = (c as { get: (k: string) => unknown }).get('validatedParams') as { id: string };
   return ok(c, await reportsService.getById(id));
 });

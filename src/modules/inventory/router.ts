@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { authJWT, optionalAuth } from '../../middlewares/auth-jwt.js';
+import { authJWT } from '../../middlewares/auth-jwt.js';
 import { rbacGuard } from '../../middlewares/rbac-guard.js';
 import { validateBody, validateQuery, validateParams } from '../../lib/validation.js';
 import {
@@ -21,7 +21,7 @@ export const inventoryRouter = new Hono();
 // Listar inventario
 inventoryRouter.get(
   '/',
-  optionalAuth,
+  authJWT,
   validateQuery(listInventoryQueryDto),
   async (c) => {
     const query = (c as any).get('validatedQuery') as z.infer<typeof listInventoryQueryDto>;
@@ -71,7 +71,7 @@ inventoryRouter.get(
 );
 
 // Estadísticas de inventario (DEBE IR ANTES DE /:id)
-inventoryRouter.get('/stats', optionalAuth, async (c) => {
+inventoryRouter.get('/stats', authJWT, async (c) => {
   const stats = await inventoryService.getStats();
   return ok(c, stats);
 });
@@ -79,7 +79,7 @@ inventoryRouter.get('/stats', optionalAuth, async (c) => {
 // Alertas de inventario
 inventoryRouter.get(
   '/alerts',
-  optionalAuth,
+  authJWT,
   validateQuery(listAlertsQueryDto),
   async (c) => {
     const query = (c as any).get('validatedQuery') as z.infer<typeof listAlertsQueryDto>;
@@ -92,14 +92,14 @@ inventoryRouter.get(
 );
 
 // Productos con stock bajo
-inventoryRouter.get('/low-stock', optionalAuth, async (c) => {
+inventoryRouter.get('/low-stock', authJWT, async (c) => {
   const threshold = parseInt(c.req.query('threshold') || '10', 10);
   const products = await inventoryService.getLowStock(threshold);
   return ok(c, products.map(mapProduct));
 });
 
 // Productos sin stock
-inventoryRouter.get('/out-of-stock', optionalAuth, async (c) => {
+inventoryRouter.get('/out-of-stock', authJWT, async (c) => {
   const products = await inventoryService.getOutOfStock();
   return ok(c, products.map(mapProduct));
 });
@@ -123,7 +123,7 @@ inventoryRouter.patch(
 );
 
 // Listar ubicaciones (sucursales) (DEBE IR ANTES DE /:id)
-inventoryRouter.get('/locations', optionalAuth, async (c) => {
+inventoryRouter.get('/locations', authJWT, async (c) => {
   const locations = await inventoryService.getLocations();
   return ok(c, locations);
 });
@@ -131,7 +131,7 @@ inventoryRouter.get('/locations', optionalAuth, async (c) => {
 // Inventario por ubicación (DEBE IR ANTES DE /:id)
 inventoryRouter.get(
   '/by-location/:location',
-  optionalAuth,
+  authJWT,
   validateParams(locationParamDto),
   validateQuery(listInventoryQueryDto),
   async (c) => {
@@ -172,7 +172,7 @@ inventoryRouter.post(
 // Obtener item de inventario por ID (DEBE IR DESPUÉS DE TODAS LAS RUTAS ESPECÍFICAS)
 inventoryRouter.get(
   '/:id',
-  optionalAuth,
+  authJWT,
   validateParams(inventoryIdParamDto),
   async (c) => {
     const params = (c as any).get('validatedParams') as { id: number };

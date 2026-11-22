@@ -19,21 +19,3 @@ export const authJWT = async (c: Context, next: Next) => {
     throw new AppError(ErrorCodes.INVALID_TOKEN, 'Token inválido o expirado', 401);
   }
 };
-
-// Middleware opcional: permite endpoints públicos
-export const optionalAuth = async (c: Context, next: Next) => {
-  const authHeader = c.req.header('Authorization');
-
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    const token = authHeader.substring(7);
-    try {
-      const payload = verifyToken(token);
-      c.set('user', payload);
-    } catch {
-      // Ignorar errores de token en auth opcional
-    }
-  }
-
-  await next();
-};
-
