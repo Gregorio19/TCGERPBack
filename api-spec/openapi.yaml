@@ -405,12 +405,133 @@ components:
           type: integer
           format: int64
           minimum: 1
-          description: Precio unitario en CLP (centavos)
+          description: Precio unitario en CLP en pesos enteros
         descuento:
           type: integer
           format: int64
           minimum: 0
           default: 0
+
+    PaymentMethod:
+      type: string
+      enum: [efectivo, debito, credito, transferencia, credito_tienda]
+
+    PaymentInput:
+      type: object
+      required: [method, amount]
+      properties:
+        method:
+          $ref: '#/components/schemas/PaymentMethod'
+        amount:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+          description: Monto en CLP. En efectivo indica cuánto entregó el cliente.
+        reference: { type: string, minLength: 1, maxLength: 255 }
+
+    Payment:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        orderId: { type: string, format: uuid }
+        method:
+          $ref: '#/components/schemas/PaymentMethod'
+        amount: { type: integer, description: Monto aplicado a la orden en CLP. }
+        reference: { type: [string, 'null'] }
+        cashSessionId: { type: [string, 'null'], format: uuid }
+        createdAt: { type: string, format: date-time }
+
+    Seller:
+      type: [object, 'null']
+      required: [id, nombre]
+      properties:
+        id: { type: string, format: uuid }
+        nombre: { type: string }
+
+    StockMovementType:
+      type: string
+      enum: [venta, recepcion, transferencia_salida, transferencia_entrada, ajuste, devolucion, compra_cliente]
+
+    StockMovement:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        productId: { type: integer }
+        branchId: { type: string, format: uuid }
+        type:
+          $ref: '#/components/schemas/StockMovementType'
+        quantity: { type: integer, description: Variación de unidades con signo. }
+        balanceAfter: { type: integer, description: Saldo de la sucursal tras el movimiento. }
+        reason: { type: [string, 'null'] }
+        refType:
+          type: [string, 'null']
+          enum: [order, reception, transfer, return, purchase, null]
+        refId: { type: [string, 'null'], format: uuid }
+        userId: { type: string, format: uuid }
+        createdAt: { type: string, format: date-time }
+
+    CashSession:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        branchId: { type: string, format: uuid }
+        userId: { type: string, format: uuid }
+        openedAt: { type: string, format: date-time }
+        openingAmount: { type: integer, minimum: 0 }
+        closedAt: { type: [string, 'null'], format: date-time }
+        closedById: { type: [string, 'null'], format: uuid }
+        countedAmount: { type: [integer, 'null'], minimum: 0 }
+        expectedAmount: { type: [integer, 'null'], minimum: 0 }
+        difference: { type: [integer, 'null'] }
+        notes: { type: [string, 'null'] }
+        status: { type: string, enum: [abierta, cerrada] }
+
+    CashSessionSummary:
+      allOf:
+        - $ref: '#/components/schemas/CashSession'
+        - type: object
+          required: [expectedAmount, totalsByMethod, salesCount]
+          properties:
+            expectedAmount: { type: integer, minimum: 0 }
+            totalsByMethod:
+              type: object
+              required: [efectivo, debito, credito, transferencia, credito_tienda]
+              properties:
+                efectivo: { type: integer, minimum: 0 }
+                debito: { type: integer, minimum: 0 }
+                credito: { type: integer, minimum: 0 }
+                transferencia: { type: integer, minimum: 0 }
+                credito_tienda: { type: integer, minimum: 0 }
+            salesCount: { type: integer, minimum: 0, description: Número de órdenes distintas con pagos en esta sesión. }
+
+    CustomerFields:
+      type: object
+      properties:
+        nombre: { type: string, minLength: 1, maxLength: 100 }
+        apellido: { type: string, minLength: 1, maxLength: 100 }
+        email: { type: string, format: email }
+        telefono: { type: string, example: '+56 9 1234 5678' }
+        rut: { type: string, description: RUT chileno con puntos y dígito verificador válido. }
+        direccion:
+          type: object
+          properties:
+            calle: { type: string, minLength: 1, maxLength: 200 }
+            numero: { type: string }
+            comuna: { type: string, minLength: 1, maxLength: 100 }
+            ciudad: { type: string, minLength: 1, maxLength: 100 }
+            region: { type: string, minLength: 1, maxLength: 100 }
+            codigoPostal: { type: string }
+        canal: { type: string, minLength: 1, maxLength: 100 }
+        estado: { type: string, enum: [activo, inactivo, suspendido] }
+
+    CreateCustomerRequest:
+      allOf:
+        - $ref: '#/components/schemas/CustomerFields'
+        - type: object
+          required: [nombre]
+          anyOf:
+            - required: [rut]
+            - required: [telefono]
 
     CreateOrderRequest:
       type: object
@@ -447,6 +568,13 @@ components:
           format: int64
           minimum: 0
           default: 0
+        payments:
+          type: array
+          minItems: 1
+          maxItems: 100
+          description: Opcional. Debe cubrir el total. El exceso de efectivo se devuelve como vuelto.
+          items:
+            $ref: '#/components/schemas/PaymentInput'
         estado:
           $ref: '#/components/schemas/OrderStatus'
           default: pendiente
@@ -521,6 +649,15 @@ components:
         clienteId:
           type: string
           format: uuid
+        vendedorId: { type: [string, 'null'], format: uuid }
+        vendedor:
+          $ref: '#/components/schemas/Seller'
+        payments:
+          type: array
+          items:
+            $ref: '#/components/schemas/Payment'
+        amountTendered: { type: integer, description: Efectivo entregado en CLP al crear con pagos. }
+        change: { type: integer, description: Vuelto en CLP al crear con pagos. }
         sucursalId:
           type: string
           format: uuid
@@ -563,9 +700,9 @@ components:
             nombre:
               type: string
             apellido:
-              type: string
+              type: [string, 'null']
             email:
-              type: string
+              type: [string, 'null']
         sucursal:
           type: object
           properties:
@@ -602,15 +739,16 @@ components:
         nombre:
           type: string
         apellido:
-          type: string
+          type: [string, 'null']
         email:
-          type: string
+          type: [string, 'null']
         telefono:
-          type: string
+          type: [string, 'null']
         rut:
-          type: string
+          type: [string, 'null']
         direccion:
-          type: object
+          type: [object, 'null']
+        canal: { type: [string, 'null'] }
         estado:
           type: string
         fechaRegistro:
@@ -1750,7 +1888,7 @@ components:
         precio:
           type: integer
           format: int64
-          description: Precio en CLP (centavos)
+          description: Precio en CLP en pesos enteros
         precio_compra:
           type: integer
           format: int64
@@ -1826,7 +1964,7 @@ components:
           type: integer
           format: int64
           minimum: 1
-          description: Precio en CLP (centavos)
+          description: Precio en CLP en pesos enteros
         precio_compra:
           type: integer
           format: int64
@@ -2499,6 +2637,7 @@ paths:
     post:
       tags: [products]
       summary: Crear producto
+      description: El stock inicial se registra en la sucursal del usuario autenticado.
       requestBody:
         required: true
         content:
@@ -2617,6 +2756,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Product'
+        '409':
+          description: Stock insuficiente en la sucursal de origen o de ajuste
         '404':
           $ref: '#/components/responses/NotFound'
         '422':
@@ -2700,6 +2841,7 @@ paths:
     patch:
       tags: [products]
       summary: Actualizar stock de producto
+      description: Ajusta el total del producto aplicando la diferencia en la sucursal del usuario autenticado.
       parameters:
         - name: id
           in: path
@@ -2725,6 +2867,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Product'
+        '409':
+          description: Stock insuficiente en la sucursal del usuario para reducir el total
         '404':
           $ref: '#/components/responses/NotFound'
         '422':
@@ -2801,6 +2945,8 @@ paths:
       responses:
         '200':
           description: Item actualizado
+        '409':
+          description: Stock insuficiente en la sucursal de origen o de ajuste
         '404':
           $ref: '#/components/responses/NotFound'
         '401':
@@ -2871,6 +3017,7 @@ paths:
     patch:
       tags: [inventory]
       summary: Actualizar stock
+      description: Ajusta el total del producto aplicando la diferencia en la sucursal del usuario autenticado.
       parameters:
         - name: id
           in: path
@@ -2893,6 +3040,8 @@ paths:
       responses:
         '200':
           description: Stock actualizado
+        '409':
+          description: Stock insuficiente en la sucursal del usuario para reducir el total
         '404':
           $ref: '#/components/responses/NotFound'
         '401':
@@ -2938,10 +3087,52 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
 
+  /inventory/movements:
+    get:
+      tags: [inventory]
+      summary: Listar movimientos de stock
+      x-required-permission: inventory.view
+      parameters:
+        - name: productId
+          in: query
+          schema: { type: integer, minimum: 1 }
+        - name: branchId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: type
+          in: query
+          schema:
+            $ref: '#/components/schemas/StockMovementType'
+        - $ref: '#/components/parameters/page'
+        - name: pageSize
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+      responses:
+        '200':
+          description: Movimientos más recientes primero
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/StockMovement'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/Error422'
+
   /inventory/adjustment:
     post:
       tags: [inventory]
       summary: Ajuste de inventario
+      description: Si se omite branchId, usa la sucursal del usuario autenticado.
       requestBody:
         required: true
         content:
@@ -2956,6 +3147,7 @@ paths:
               properties:
                 productoId:
                   type: integer
+                branchId: { type: string, format: uuid }
                 cantidad:
                   type: integer
                 motivo:
@@ -2966,6 +3158,10 @@ paths:
       responses:
         '201':
           description: Ajuste realizado
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Stock de sucursal insuficiente
         '422':
           $ref: '#/components/responses/Error422'
         '401':
@@ -3158,6 +3354,8 @@ paths:
       responses:
         '200':
           description: Transferencia actualizada
+        '409':
+          description: Stock insuficiente en la sucursal de origen o de ajuste
         '404':
           $ref: '#/components/responses/NotFound'
         '401':
@@ -3307,7 +3505,18 @@ paths:
         - $ref: '#/components/parameters/dateTo'
       responses:
         '200':
-          description: Lista de ventas
+          description: Lista de ventas con vendedor y pagos
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/OrderResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -3320,10 +3529,18 @@ paths:
         content:
           application/json:
             schema:
-              type: object
+              $ref: '#/components/schemas/CreateOrderRequest'
       responses:
         '201':
           description: Venta creada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderResponse'
+        '400':
+          description: Los pagos no cuadran, se solicitó crédito en tienda o el total está fuera de rango
+        '409':
+          description: Stock de sucursal insuficiente al completar la orden
         '422':
           $ref: '#/components/responses/Error422'
         '401':
@@ -3340,10 +3557,15 @@ paths:
           in: path
           required: true
           schema:
-            type: integer
+            type: string
+            format: uuid
       responses:
         '200':
           description: Venta encontrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderResponse'
         '404':
           $ref: '#/components/responses/NotFound'
         '401':
@@ -3358,10 +3580,19 @@ paths:
           in: path
           required: true
           schema:
-            type: integer
+            type: string
+            format: uuid
       responses:
         '200':
           description: Venta actualizada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderResponse'
+        '400':
+          description: El total actualizado debe coincidir con los pagos registrados
+        '409':
+          description: Stock de sucursal insuficiente al completar la orden
         '404':
           $ref: '#/components/responses/NotFound'
         '401':
@@ -3376,7 +3607,8 @@ paths:
           in: path
           required: true
           schema:
-            type: integer
+            type: string
+            format: uuid
       responses:
         '200':
           description: Venta eliminada
@@ -3420,7 +3652,8 @@ paths:
           in: path
           required: true
           schema:
-            type: integer
+            type: string
+            format: uuid
       requestBody:
         required: true
         content:
@@ -3436,6 +3669,12 @@ paths:
       responses:
         '200':
           description: Estado actualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderResponse'
+        '409':
+          description: Stock de sucursal insuficiente al completar la orden
         '404':
           $ref: '#/components/responses/NotFound'
         '401':
@@ -3472,6 +3711,264 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+
+  /pos/products:
+    get:
+      tags: [sales]
+      summary: Buscar productos para el punto de venta
+      x-required-permission: sales.create
+      parameters:
+        - $ref: '#/components/parameters/search'
+      responses:
+        '200':
+          description: Productos del catálogo
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id: { type: integer }
+                    nombre: { type: string }
+                    sku: { type: [string, 'null'] }
+                    precio: { type: integer }
+                    stock: { type: integer }
+                    categoria: { type: string }
+                    activo: { type: boolean }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /pos/sale:
+    post:
+      tags: [sales]
+      summary: Completar una venta en el punto de venta
+      x-required-permission: sales.create
+      description: Requiere caja abierta del vendedor. Usa precios de catálogo y calcula IVA como en las órdenes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [clienteId, items, payments]
+              properties:
+                clienteId: { type: string, format: uuid }
+                sucursalId: { type: string, format: uuid, description: Por defecto usa la sucursal del vendedor. }
+                items:
+                  type: array
+                  minItems: 1
+                  maxItems: 100
+                  items:
+                    type: object
+                    required: [productId, cantidad]
+                    properties:
+                      productId: { type: integer, minimum: 1 }
+                      cantidad: { type: integer, minimum: 1 }
+                payments:
+                  type: array
+                  minItems: 1
+                  maxItems: 100
+                  items:
+                    $ref: '#/components/schemas/PaymentInput'
+      responses:
+        '201':
+          description: Venta completada y stock descontado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ordenId: { type: string, format: uuid }
+                  numero: { type: string }
+                  total: { type: integer }
+                  estado: { type: string, const: completada }
+                  vendedorId: { type: string, format: uuid }
+                  vendedor:
+                    $ref: '#/components/schemas/Seller'
+                  payments:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Payment'
+                  amountTendered: { type: integer, description: Efectivo entregado en CLP. }
+                  change: { type: integer, description: Vuelto en CLP. }
+        '400':
+          description: Los pagos no cuadran, se solicitó crédito en tienda o el total está fuera de rango
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Caja sin abrir o stock de sucursal insuficiente
+        '422':
+          $ref: '#/components/responses/Error422'
+
+  /cash-sessions/open:
+    post:
+      tags: [sales]
+      summary: Abrir caja
+      x-required-permission: sales.create
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [branchId, openingAmount]
+              properties:
+                branchId: { type: string, format: uuid }
+                openingAmount: { type: integer, minimum: 0, maximum: 2147483647 }
+      responses:
+        '201':
+          description: Caja abierta
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CashSession'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: El usuario ya tiene caja abierta en la sucursal
+        '422':
+          $ref: '#/components/responses/Error422'
+
+  /cash-sessions/current:
+    get:
+      tags: [sales]
+      summary: Consultar la caja abierta del usuario
+      x-required-permission: sales.view
+      parameters:
+        - name: branchId
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Caja abierta del usuario autenticado, si existe
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/CashSession'
+                  - type: 'null'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/Error422'
+
+  /cash-sessions/{id}/close:
+    post:
+      tags: [sales]
+      summary: Cerrar y cuadrar caja
+      x-required-permission: sales.create
+      description: El saldo esperado suma el fondo inicial y los pagos aplicados en efectivo. La diferencia es el monto contado menos el esperado.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [countedAmount]
+              properties:
+                countedAmount: { type: integer, minimum: 0, maximum: 2147483647 }
+                notes: { type: string, maxLength: 2000 }
+      responses:
+        '200':
+          description: Caja cerrada con saldo esperado y diferencia
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CashSession'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Caja ya cerrada o monto esperado fuera de rango
+        '422':
+          $ref: '#/components/responses/Error422'
+
+  /cash-sessions/{id}/summary:
+    get:
+      tags: [sales]
+      summary: Consultar totales y ventas de una caja
+      x-required-permission: sales.view
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Totales por medio de pago y número de ventas de la sesión
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CashSessionSummary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Error422'
+
+  /cash-sessions:
+    get:
+      tags: [sales]
+      summary: Listar sesiones de caja
+      x-required-permission: sales.view
+      parameters:
+        - name: branchId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: from
+          in: query
+          description: Inicio inclusivo del rango de aperturas. Una fecha sin hora comienza a las 00:00 UTC.
+          schema:
+            oneOf:
+              - { type: string, format: date }
+              - { type: string, format: date-time }
+        - name: to
+          in: query
+          description: Fin inclusivo del rango de aperturas. Una fecha sin hora incluye todo el día UTC.
+          schema:
+            oneOf:
+              - { type: string, format: date }
+              - { type: string, format: date-time }
+      responses:
+        '200':
+          description: Sesiones ordenadas por apertura descendente
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CashSession'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/Error422'
 
   # ÓRDENES
   /orders:
@@ -3618,6 +4115,10 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+        '400':
+          description: Los pagos no cuadran, se solicitó crédito en tienda o el total está fuera de rango
+        '409':
+          description: Stock de sucursal insuficiente al completar la orden
         '422':
           $ref: '#/components/responses/Error422'
         '403':
@@ -3673,6 +4174,10 @@ paths:
                 $ref: '#/components/schemas/OrderResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '400':
+          description: El total actualizado debe coincidir con los pagos registrados
+        '409':
+          description: Stock de sucursal insuficiente al completar la orden
         '404':
           $ref: '#/components/responses/NotFound'
         '422':
@@ -3791,10 +4296,18 @@ paths:
         content:
           application/json:
             schema:
-              type: object
+              $ref: '#/components/schemas/CreateCustomerRequest'
       responses:
         '201':
           description: Cliente creado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Customer'
+        '400':
+          description: Debes indicar un RUT o un teléfono
+        '409':
+          description: Correo o RUT duplicado
         '422':
           $ref: '#/components/responses/Error422'
         '401':
@@ -3830,6 +4343,12 @@ paths:
           required: true
           schema:
             type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CustomerFields'
       responses:
         '200':
           description: Cliente actualizado
@@ -4308,6 +4827,12 @@ paths:
       responses:
         '200':
           description: Lista de órdenes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OrderResponse'
         '404':
           $ref: '#/components/responses/NotFound'
         '401':
@@ -4867,6 +5392,43 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+
+  /hr/me:
+    get:
+      tags: [rrhh]
+      summary: Consultar mi ficha de empleado y horario
+      description: Disponible para todo usuario autenticado. Busca la ficha por el correo de la cuenta.
+      responses:
+        '200':
+          description: Ficha, contrato vigente, datos bancarios, previsión y horario
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/RrhhApiEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        allOf:
+                          - $ref: '#/components/schemas/RrhhEmpleado'
+                          - type: object
+                            properties:
+                              schedule:
+                                type: object
+                                required: [templates, exceptions]
+                                properties:
+                                  templates:
+                                    type: array
+                                    items:
+                                      $ref: '#/components/schemas/RrhhScheduleTemplate'
+                                  exceptions:
+                                    type: array
+                                    items:
+                                      $ref: '#/components/schemas/RrhhScheduleException'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: No hay ficha de empleado asociada
 
   /hr/employees:
     get:

@@ -1,7 +1,8 @@
 import { db } from '../../lib/db.js';
 import { AppError, ErrorCodes } from '../../lib/errors.js';
 import { PaginationParams, buildPaginatedResponse } from '../../lib/pagination.js';
-import { Prisma } from '@prisma/client';
+import { Prisma, type StockMovementType } from '@prisma/client';
+import { applyStockChange, userBranchId } from './stock.js';
 
 export const inventoryService = {
   async list(params: PaginationParams & {
@@ -174,22 +175,39 @@ export const inventoryService = {
     return product;
   },
 
-  async updateStock(id: number, stockActual: number, motivo?: string) {
-    if (stockActual < 0) {
-      throw new AppError(ErrorCodes.INVALID_STOCK, 'El stock no puede ser negativo', 422);
-    }
-
-    const product = await this.getById(id);
-
-    const updated = await db.product.update({
-      where: { id },
-      data: { stock: stockActual },
+  updateStock(id: number, stockActual: number, userId: string, motivo?: string) {
+    return db.$transaction(async (tx) => {
+      const product = await tx.product.findFirst({ where: { id, activo: true, deletedAt: null } });
+      if (!product) {
+        throw new AppError(ErrorCodes.PRODUCT_NOT_FOUND, `Producto con ID ${id} no encontrado`, 404);
+      }
+      const result = await applyStockChange(tx, {
+        productId: id,
+        branchId: await userBranchId(tx, userId),
+        totalBalance: stockActual,
+        type: 'ajuste',
+        reason: motivo,
+        userId,
+      });
+      return result.product;
     });
+  },
 
-    // TODO: Registrar ajuste en tabla de historial si existe
-    // Por ahora solo actualizamos el stock
-
-    return updated;
+  async listMovements(page: number, pageSize: number, where: {
+    productId?: number;
+    branchId?: string;
+    type?: StockMovementType;
+  }) {
+    const [data, total] = await Promise.all([
+      db.stockMovement.findMany({
+        where,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      db.stockMovement.count({ where }),
+    ]);
+    return buildPaginatedResponse(data, total, page, pageSize);
   },
 
   async getStats() {
@@ -474,118 +492,28 @@ export const inventoryService = {
     return buildPaginatedResponse(data, total, page, pageSize);
   },
 
-  async adjustInventory(data: {
+  adjustInventory(data: {
     productoId: number;
     branchId?: string;
     cantidad: number;
     motivo: string;
     tipo: 'entrada' | 'salida';
-  }) {
-    const product = await db.product.findUnique({
-      where: { id: data.productoId },
-    });
-
-    if (!product) {
-      throw new AppError(
-        ErrorCodes.PRODUCT_NOT_FOUND,
-        `Producto con ID ${data.productoId} no encontrado`,
-        404
-      );
-    }
-
-    // Si se especifica branchId, ajustar stock por sucursal
-    if (data.branchId) {
-      const branch = await db.branch.findUnique({
-        where: { id: data.branchId },
-      });
-
+  }, userId: string) {
+    return db.$transaction(async (tx) => {
+      const branchId = data.branchId ?? await userBranchId(tx, userId);
+      const branch = await tx.branch.findFirst({ where: { id: branchId, deletedAt: null } });
       if (!branch) {
-        throw new AppError(
-          ErrorCodes.BRANCH_NOT_FOUND,
-          `Sucursal con ID ${data.branchId} no encontrada`,
-          404
-        );
+        throw new AppError(ErrorCodes.BRANCH_NOT_FOUND, `Sucursal con ID ${branchId} no encontrada`, 404);
       }
-
-      // Buscar o crear StockByBranch
-      let stockByBranch = await db.stockByBranch.findUnique({
-        where: {
-          productId_branchId: {
-            productId: data.productoId,
-            branchId: data.branchId,
-          },
-        },
+      const { stock, product } = await applyStockChange(tx, {
+        productId: data.productoId,
+        branchId,
+        quantity: data.tipo === 'entrada' ? data.cantidad : -data.cantidad,
+        type: 'ajuste',
+        reason: data.motivo,
+        userId,
       });
-
-      const newCantidad =
-        data.tipo === 'entrada'
-          ? (stockByBranch?.cantidad || 0) + data.cantidad
-          : (stockByBranch?.cantidad || 0) - data.cantidad;
-
-      if (newCantidad < 0) {
-        throw new AppError(
-          ErrorCodes.INSUFFICIENT_STOCK,
-          `Stock insuficiente en sucursal. Stock actual: ${stockByBranch?.cantidad || 0}`,
-          422
-        );
-      }
-
-      if (stockByBranch) {
-        stockByBranch = await db.stockByBranch.update({
-          where: {
-            productId_branchId: {
-              productId: data.productoId,
-              branchId: data.branchId,
-            },
-          },
-          data: { cantidad: newCantidad },
-        });
-      } else {
-        stockByBranch = await db.stockByBranch.create({
-          data: {
-            productId: data.productoId,
-            branchId: data.branchId,
-            cantidad: newCantidad,
-          },
-        });
-      }
-
-      // Actualizar stock general del producto
-      const totalStockByBranch = await db.stockByBranch.aggregate({
-        where: { productId: data.productoId },
-        _sum: { cantidad: true },
-      });
-
-      await db.product.update({
-        where: { id: data.productoId },
-        data: {
-          stock: totalStockByBranch._sum.cantidad || 0,
-        },
-      });
-
-      return stockByBranch;
-    }
-
-    // Si no se especifica branchId, ajustar stock general
-    const newStock =
-      data.tipo === 'entrada'
-        ? product.stock + data.cantidad
-        : product.stock - data.cantidad;
-
-    if (newStock < 0) {
-      throw new AppError(
-        ErrorCodes.INSUFFICIENT_STOCK,
-        `Stock insuficiente. Stock actual: ${product.stock}`,
-        422
-      );
-    }
-
-    const updated = await db.product.update({
-      where: { id: data.productoId },
-      data: { stock: newStock },
+      return data.branchId ? stock : product;
     });
-
-    return updated;
   },
 };
-

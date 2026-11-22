@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { authJWT } from '../../middlewares/auth-jwt.js';
+import { authJWT, getAuthUser } from '../../middlewares/auth-jwt.js';
 import { rbacGuard } from '../../middlewares/rbac-guard.js';
 import { validateBody, validateQuery, validateParams } from '../../lib/validation.js';
 import { ok, created, noContent } from '../../lib/responses.js';
@@ -84,7 +84,7 @@ salesApiRouter.get('/', authJWT, rbacGuard, validateQuery(listOrdersQueryDto), a
 
 salesApiRouter.post('/', authJWT, rbacGuard, validateBody(createOrderDto), async (c) => {
   const data = (c as { get: (k: string) => unknown }).get('validatedBody') as z.infer<typeof createOrderDto>;
-  const order = await orderService.create(data);
+  const order = await orderService.create(data, getAuthUser(c).userId);
   return created(c, mapOrder(order));
 });
 
@@ -97,7 +97,7 @@ salesApiRouter.get('/:id', authJWT, rbacGuard, validateParams(orderIdParamDto), 
 salesApiRouter.put('/:id', authJWT, rbacGuard, validateParams(orderIdParamDto), validateBody(updateOrderDto), async (c) => {
   const { id } = (c as { get: (k: string) => unknown }).get('validatedParams') as { id: string };
   const data = (c as { get: (k: string) => unknown }).get('validatedBody') as z.infer<typeof updateOrderDto>;
-  const order = await orderService.update(id, data);
+  const order = await orderService.update(id, data, getAuthUser(c).userId);
   return ok(c, mapOrder(order));
 });
 
@@ -112,7 +112,7 @@ salesApiRouter.patch(
     const { estado } = (c as { get: (k: string) => unknown }).get('validatedBody') as z.infer<
       typeof patchSaleStatusDto
     >;
-    const order = await orderService.update(id, { estado: estado as OrderStatus });
+    const order = await orderService.update(id, { estado: estado as OrderStatus }, getAuthUser(c).userId);
     return ok(c, mapOrder(order));
   }
 );

@@ -3,6 +3,27 @@ import assert from 'node:assert/strict';
 import { requestAsAdmin } from '../../test-utils/auth.js';
 
 describe('RRHH API (integración)', () => {
+  it('GET /api/hr/me devuelve la ficha propia o 404 cuando el admin no tiene ficha', async () => {
+    const res = await requestAsAdmin('/api/hr/me');
+    if (res.status === 404) {
+      const json = await res.json() as { error: { message: string } };
+      assert.equal(json.error.message, 'No hay ficha de empleado asociada');
+      return;
+    }
+    assert.equal(res.status, 200);
+    const json = await res.json() as {
+      success: boolean;
+      data: { id: string; schedule: { templates: unknown[]; exceptions: unknown[] } };
+    };
+    assert.equal(json.success, true);
+    assert.ok(json.data.id);
+    assert.ok(Array.isArray(json.data.schedule.templates));
+    assert.ok(Array.isArray(json.data.schedule.exceptions));
+    assert.ok('contratoVigente' in json.data);
+    assert.ok('datosBancarios' in json.data);
+    assert.ok('previsional' in json.data);
+  });
+
   it('GET /api/hr/positions devuelve ApiResponse con data array', async () => {
     const res = await requestAsAdmin('/api/hr/positions');
     assert.equal(res.status, 200);

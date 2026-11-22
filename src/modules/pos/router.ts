@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { authJWT } from '../../middlewares/auth-jwt.js';
+import { authJWT, getAuthUser } from '../../middlewares/auth-jwt.js';
 import { rbacGuard } from '../../middlewares/rbac-guard.js';
 import { validateBody } from '../../lib/validation.js';
 import { ok, created } from '../../lib/responses.js';
@@ -8,14 +8,14 @@ import { uuidSchema } from '../../lib/validation.js';
 import { productService } from '../products/service.js';
 import { orderService } from '../sales/service.js';
 import { mapProduct } from '../../lib/mapper.js';
-import { db } from '../../lib/db.js';
-import { AppError, ErrorCodes } from '../../lib/errors.js';
+import { paymentsDto } from '../sales/payments.js';
 
 export const posRouter = new Hono();
 
 const posSaleDto = z.object({
   clienteId: uuidSchema,
   sucursalId: uuidSchema.optional(),
+  payments: paymentsDto,
   items: z
     .array(
       z.object({
@@ -23,7 +23,7 @@ const posSaleDto = z.object({
         cantidad: z.number().int().positive(),
       })
     )
-    .min(1),
+    .min(1).max(100),
 });
 
 posRouter.get('/products', authJWT, rbacGuard, async (c) => {
@@ -53,50 +53,16 @@ posRouter.get('/products', authJWT, rbacGuard, async (c) => {
 
 posRouter.post('/sale', authJWT, rbacGuard, validateBody(posSaleDto), async (c) => {
   const body = (c as { get: (k: string) => unknown }).get('validatedBody') as z.infer<typeof posSaleDto>;
-  const user = (c as { get: (k: string) => unknown }).get('user') as { userId: string };
-
-  const userRow = await db.user.findUnique({
-    where: { id: user.userId },
-    select: { sucursalId: true },
-  });
-  const sucursalId = body.sucursalId ?? userRow?.sucursalId;
-  if (!sucursalId) {
-    throw new AppError(ErrorCodes.VALIDATION_ERROR, 'sucursalId requerido (body o usuario)', 400);
-  }
-
-  const productIds = body.items.map((i) => i.productId);
-  const products = await db.product.findMany({
-    where: { id: { in: productIds }, deletedAt: null, activo: true },
-  });
-  const byId = new Map(products.map((p) => [p.id, p]));
-
-  const items = body.items.map((it) => {
-    const p = byId.get(it.productId);
-    if (!p) {
-      throw new AppError(ErrorCodes.PRODUCT_NOT_FOUND, `Producto ${it.productId} no disponible`, 404);
-    }
-    return {
-      productId: it.productId,
-      cantidad: it.cantidad,
-      precioUnitario: p.precio,
-      descuento: 0,
-    };
-  });
-
-  const order = await orderService.create({
-    clienteId: body.clienteId,
-    sucursalId,
-    canal: 'tienda_fisica',
-    tipoDocumento: 'boleta',
-    items,
-    descuentoGeneral: 0,
-    costoEnvio: 0,
-    estado: 'pendiente',
-  });
-
+  const order = await orderService.createPos(body, getAuthUser(c).userId);
   return created(c, {
     ordenId: order.id,
     numero: order.numero,
     total: order.total,
+    estado: order.estado,
+    vendedorId: order.vendedorId,
+    vendedor: order.vendedor,
+    payments: order.payments,
+    amountTendered: order.amountTendered,
+    change: order.change,
   });
 });

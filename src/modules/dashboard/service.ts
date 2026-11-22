@@ -105,7 +105,7 @@ export const dashboardService = {
 
     const ventasRecientes = ventasRecientesRows.map((o) => ({
       id: o.numero,
-      cliente: `${o.cliente.nombre} ${o.cliente.apellido}`.trim(),
+      cliente: `${o.cliente.nombre} ${o.cliente.apellido ?? ''}`.trim(),
       total: o.total,
       fecha: o.fechaCreacion.toISOString(),
     }));

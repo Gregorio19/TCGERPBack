@@ -258,6 +258,31 @@ export const hrService = {
     return mapEmpleado(await requireEmployee(id));
   },
 
+  async getMyEmployee(userId: string) {
+    const user = await db.user.findFirst({
+      where: { id: userId, activo: true, deletedAt: null },
+      select: { email: true },
+    });
+    const employee = user && await db.employee.findFirst({
+      where: { email: user.email, deletedAt: null },
+      include: {
+        ...employeeInclude,
+        scheduleTemplates: { orderBy: [{ dayOfWeek: 'asc' }, { startTime: 'asc' }] },
+        scheduleExceptions: { orderBy: [{ date: 'asc' }, { startTime: 'asc' }] },
+      },
+    });
+    if (!employee) {
+      throw new AppError(ErrorCodes.EMPLOYEE_NOT_FOUND, 'No hay ficha de empleado asociada', 404);
+    }
+    return {
+      ...mapEmpleado(employee),
+      schedule: {
+        templates: employee.scheduleTemplates,
+        exceptions: employee.scheduleExceptions,
+      },
+    };
+  },
+
   async createEmployee(input: {
     rut: string;
     nombre: string;

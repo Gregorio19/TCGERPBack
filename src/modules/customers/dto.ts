@@ -1,4 +1,4 @@
-import { CustomerVisitType } from '@prisma/client';
+import { CustomerVisitType, type Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { uuidSchema, emailSchema } from '../../lib/validation.js';
 import { validateRut, normalizeRut } from '../../lib/rut-validator.js';
@@ -14,7 +14,7 @@ export const addressSchema = z.object({
   ciudad: z.string().min(1).max(100),
   region: z.string().min(1).max(100),
   codigoPostal: z.string().optional(),
-}).passthrough(); // Permite campos adicionales
+}).partial().passthrough().transform((address) => address as Prisma.InputJsonObject);
 
 // Schema para RUT con validación de dígito verificador
 const rutWithValidation = z.string()
@@ -51,11 +51,12 @@ const phoneSchema = z.string()
 // DTO para crear cliente
 export const createCustomerDto = z.object({
   nombre: z.string().min(1).max(100, { message: 'Nombre debe tener máximo 100 caracteres' }),
-  apellido: z.string().min(1).max(100, { message: 'Apellido debe tener máximo 100 caracteres' }),
-  email: emailSchema,
-  telefono: phoneSchema,
-  rut: rutWithValidation,
-  direccion: addressSchema,
+  apellido: z.string().min(1).max(100, { message: 'Apellido debe tener máximo 100 caracteres' }).optional(),
+  email: emailSchema.optional(),
+  telefono: phoneSchema.optional(),
+  rut: rutWithValidation.optional(),
+  direccion: addressSchema.optional(),
+  canal: z.string().trim().min(1).max(100).optional(),
   estado: CustomerStatusEnum.optional().default('activo'),
 });
 
@@ -67,6 +68,7 @@ export const updateCustomerDto = z.object({
   telefono: phoneSchema.optional(),
   rut: rutWithValidation.optional(),
   direccion: addressSchema.optional(),
+  canal: z.string().trim().min(1).max(100).optional(),
   estado: CustomerStatusEnum.optional(),
 }).strict();
 

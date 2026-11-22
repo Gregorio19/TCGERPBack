@@ -324,7 +324,7 @@
     "clp": {
       "type": "integer",
       "min": 0,
-      "description": "Montos en centavos CLP"
+      "description": "Montos en pesos chilenos enteros"
     }
   },
   "customValidators": {

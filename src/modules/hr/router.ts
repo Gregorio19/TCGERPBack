@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { authJWT } from '../../middlewares/auth-jwt.js';
+import { authJWT, getAuthUser } from '../../middlewares/auth-jwt.js';
 import { rbacGuard } from '../../middlewares/rbac-guard.js';
 import { validateBody, validateQuery, validateParams } from '../../lib/validation.js';
 import { parsePagination } from '../../lib/pagination.js';
@@ -44,6 +44,10 @@ import {
 } from './dto.js';
 
 export const hrRouter = new Hono();
+
+hrRouter.get('/me', authJWT, rbacGuard, async (c) => {
+  return c.json(hrEnvelope(await hrService.getMyEmployee(getAuthUser(c).userId)));
+});
 
 // --- Empleados: rutas estáticas primero ---
 hrRouter.get(

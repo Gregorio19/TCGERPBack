@@ -14,7 +14,7 @@
         "idioma": { "type": "enum", "required": false, "enum": ["espanol", "ingles", "japones", "chino", "koreano", "frances", "aleman", "italiano", "portugues", "ruso"] },
         "condicion": { "type": "enum", "required": false, "enum": ["mint", "near_mint", "excellent", "very_good", "good", "fair", "poor", "damaged"] },
         "tipo": { "type": "enum", "required": false, "enum": ["single", "sellado", "bundle", "collection"] },
-        "precio": { "type": "integer", "required": true, "min": 1, "description": "Precio en CLP (centavos)" },
+        "precio": { "type": "integer", "required": true, "min": 1, "description": "Precio en CLP en pesos enteros" },
         "precio_compra": { "type": "integer", "required": false, "min": 0 },
         "iva": { "type": "integer", "required": false, "default": 19, "description": "Porcentaje de IVA" },
         "stock": { "type": "integer", "required": true, "min": 0 },

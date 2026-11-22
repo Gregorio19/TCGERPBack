@@ -169,52 +169,32 @@ export const customerService = {
 
   async create(data: {
     nombre: string;
-    apellido: string;
-    email: string;
-    telefono: string;
-    rut: string;
-    direccion: any;
+    apellido?: string;
+    email?: string;
+    telefono?: string;
+    rut?: string;
+    direccion?: Prisma.InputJsonObject;
+    canal?: string;
     estado?: CustomerStatus;
   }) {
-    // Verificar email único
-    const existingEmail = await db.customer.findUnique({
-      where: { email: data.email },
-    });
-
-    if (existingEmail) {
-      throw new AppError(
-        ErrorCodes.DUPLICATE_EMAIL,
-        `Ya existe un cliente con el email '${data.email}'`,
-        409
-      );
+    if (!data.rut && !data.telefono) {
+      throw new AppError(ErrorCodes.BAD_REQUEST, 'Debes indicar un RUT o un teléfono', 400);
     }
 
-    // Verificar RUT único
-    const existingRut = await db.customer.findUnique({
-      where: { rut: data.rut },
-    });
-
-    if (existingRut) {
-      throw new AppError(
-        ErrorCodes.DUPLICATE_RUT,
-        `Ya existe un cliente con el RUT '${data.rut}'`,
-        409
-      );
+    try {
+      return await db.customer.create({ data });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        const fields = error.meta?.target;
+        if (Array.isArray(fields) && fields.includes('email')) {
+          throw new AppError(ErrorCodes.DUPLICATE_EMAIL, `Ya existe un cliente con el email '${data.email}'`, 409);
+        }
+        if (Array.isArray(fields) && fields.includes('rut')) {
+          throw new AppError(ErrorCodes.DUPLICATE_RUT, `Ya existe un cliente con el RUT '${data.rut}'`, 409);
+        }
+      }
+      throw error;
     }
-
-    const customer = await db.customer.create({
-      data: {
-        nombre: data.nombre,
-        apellido: data.apellido,
-        email: data.email,
-        telefono: data.telefono,
-        rut: data.rut,
-        direccion: data.direccion,
-        estado: data.estado || 'activo',
-      },
-    });
-
-    return customer;
   },
 
   async update(id: string, data: {
@@ -223,7 +203,8 @@ export const customerService = {
     email?: string;
     telefono?: string;
     rut?: string;
-    direccion?: any;
+    direccion?: Prisma.InputJsonObject;
+    canal?: string;
     estado?: CustomerStatus;
   }) {
     const existing = await this.getById(id);
@@ -267,6 +248,7 @@ export const customerService = {
         ...(data.telefono !== undefined && { telefono: data.telefono }),
         ...(data.rut !== undefined && { rut: data.rut }),
         ...(data.direccion !== undefined && { direccion: data.direccion }),
+        ...(data.canal !== undefined && { canal: data.canal }),
         ...(data.estado !== undefined && { estado: data.estado }),
       },
     });
@@ -295,6 +277,7 @@ export const customerService = {
         clienteId: customerId,
       },
       include: {
+        vendedor: { select: { id: true, nombre: true } },
         items: {
           include: {
             product: true,

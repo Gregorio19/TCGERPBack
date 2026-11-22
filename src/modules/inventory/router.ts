@@ -1,5 +1,5 @@
-import { Hono } from 'hono';
-import { authJWT } from '../../middlewares/auth-jwt.js';
+import { Hono, type Context } from 'hono';
+import { authJWT, getAuthUser } from '../../middlewares/auth-jwt.js';
 import { rbacGuard } from '../../middlewares/rbac-guard.js';
 import { validateBody, validateQuery, validateParams } from '../../lib/validation.js';
 import {
@@ -7,6 +7,7 @@ import {
   inventoryAdjustmentDto,
   listInventoryQueryDto,
   listAlertsQueryDto,
+  listMovementsQueryDto,
   inventoryIdParamDto,
   locationParamDto,
 } from './dto.js';
@@ -119,7 +120,7 @@ inventoryRouter.patch(
       stockActual: number;
       motivo?: string;
     };
-    const product = await inventoryService.updateStock(id, stockActual, motivo);
+    const product = await inventoryService.updateStock(id, stockActual, getAuthUser(c).userId, motivo);
     return ok(c, mapProduct(product));
   }
 );
@@ -167,10 +168,15 @@ inventoryRouter.post(
   validateBody(inventoryAdjustmentDto),
   async (c) => {
     const data = (c as any).get('validatedBody') as z.infer<typeof inventoryAdjustmentDto>;
-    const result = await inventoryService.adjustInventory(data);
+    const result = await inventoryService.adjustInventory(data, getAuthUser(c).userId);
     return created(c, result);
   }
 );
+
+inventoryRouter.get('/movements', authJWT, rbacGuard, validateQuery(listMovementsQueryDto), async (c) => {
+  const { page, pageSize, ...filters } = (c as Context).get('validatedQuery') as z.infer<typeof listMovementsQueryDto>;
+  return ok(c, await inventoryService.listMovements(page, pageSize, filters));
+});
 
 // Obtener item de inventario por ID (DEBE IR DESPUÉS DE TODAS LAS RUTAS ESPECÍFICAS)
 inventoryRouter.get(
@@ -205,7 +211,7 @@ inventoryRouter.put(
     
     // Importar productService para actualizar
     const { productService } = await import('../products/service.js');
-    const updated = await productService.update(params.id, body);
+    const updated = await productService.update(params.id, body, getAuthUser(c).userId);
     return ok(c, mapProduct(updated));
   }
 );

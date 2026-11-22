@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import { uuidSchema, clpSchema } from '../../lib/validation.js';
 
+import { paymentsDto } from './payments.js';
+
 // Enums
 export const OrderStatusEnum = z.enum([
   'pendiente',
@@ -54,6 +56,7 @@ export const createOrderDto = z
     items: z.array(orderItemSchema).min(1, { message: 'Debe tener al menos un item' }).max(100),
     descuentoGeneral: clpSchema.optional().default(0),
     costoEnvio: clpSchema.optional().default(0),
+    payments: paymentsDto.optional(),
     estado: OrderStatusEnum.optional().default('pendiente'),
   })
   .refine(

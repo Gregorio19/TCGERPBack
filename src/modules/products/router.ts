@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { authJWT } from '../../middlewares/auth-jwt.js';
+import { authJWT, getAuthUser } from '../../middlewares/auth-jwt.js';
 import { rbacGuard } from '../../middlewares/rbac-guard.js';
 import { validateBody, validateQuery, validateParams } from '../../lib/validation.js';
 import {
@@ -102,7 +102,7 @@ productsRouter.post(
   validateBody(createProductDto),
   async (c) => {
     const data = (c as any).get('validatedBody') as z.infer<typeof createProductDto>;
-    const product = await productService.create(data);
+    const product = await productService.create(data, getAuthUser(c).userId);
     return created(c, mapProduct(product));
   }
 );
@@ -150,7 +150,7 @@ productsRouter.put(
   async (c) => {
     const { id } = (c as any).get('validatedParams') as { id: number };
     const data = (c as any).get('validatedBody') as z.infer<typeof updateProductDto>;
-    const product = await productService.update(id, data);
+    const product = await productService.update(id, data, getAuthUser(c).userId);
     return ok(c, mapProduct(product));
   }
 );
@@ -179,7 +179,7 @@ productsRouter.patch(
   async (c) => {
     const { id } = (c as any).get('validatedParams') as { id: number };
     const { stock } = (c as any).get('validatedBody') as { stock: number };
-    const product = await productService.updateStock(id, stock);
+    const product = await productService.updateStock(id, stock, getAuthUser(c).userId);
     return ok(c, mapProduct(product));
   }
 );

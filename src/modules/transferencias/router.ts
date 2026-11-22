@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { authJWT } from '../../middlewares/auth-jwt.js';
+import { authJWT, getAuthUser } from '../../middlewares/auth-jwt.js';
 import { rbacGuard } from '../../middlewares/rbac-guard.js';
 import { validateBody, validateQuery, validateParams } from '../../lib/validation.js';
 import {
@@ -49,7 +49,7 @@ transferenciasRouter.post(
   validateBody(createTransferDto),
   async (c) => {
     const data = (c as any).get('validatedBody') as z.infer<typeof createTransferDto>;
-    const transfer = await transferService.create(data);
+    const transfer = await transferService.create(data, getAuthUser(c).userId);
     return created(c, transfer);
   }
 );
@@ -75,7 +75,7 @@ transferenciasRouter.put(
   async (c) => {
     const { id } = (c as any).get('validatedParams') as { id: string };
     const data = (c as any).get('validatedBody') as z.infer<typeof updateTransferDto>;
-    const transfer = await transferService.update(id, data);
+    const transfer = await transferService.update(id, data, getAuthUser(c).userId);
     return ok(c, transfer);
   }
 );

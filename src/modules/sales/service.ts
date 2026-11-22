@@ -1,34 +1,23 @@
 import { db } from '../../lib/db.js';
 import { AppError, ErrorCodes } from '../../lib/errors.js';
 import { PaginationParams, buildPaginatedResponse } from '../../lib/pagination.js';
-import { Prisma, OrderStatus, OrderChannel } from '@prisma/client';
-import { inventoryService } from '../inventory/service.js';
+import { Prisma, OrderStatus, OrderChannel, DocType } from '@prisma/client';
+import { applyStockChange, userBranchId } from '../inventory/stock.js';
+import { lockOpenCashSession } from '../cash-sessions/service.js';
+import { preparePayments, type PaymentInput } from './payments.js';
 
 // Función para generar número de orden único
-async function generateOrderNumber(): Promise<string> {
+async function generateOrderNumber(tx: Prisma.TransactionClient): Promise<string> {
   const prefix = 'ORD';
-  const year = new Date().getFullYear();
-  const month = String(new Date().getMonth() + 1).padStart(2, '0');
-  
-  // Buscar el último número del mes
-  const lastOrder = await db.order.findFirst({
-    where: {
-      numero: {
-        startsWith: `${prefix}-${year}${month}`,
-      },
-    },
-    orderBy: {
-      numero: 'desc',
-    },
-  });
-
-  let sequence = 1;
-  if (lastOrder) {
-    const lastSequence = parseInt(lastOrder.numero.split('-').pop() || '0', 10);
-    sequence = lastSequence + 1;
-  }
-
-  return `${prefix}-${year}${month}-${String(sequence).padStart(4, '0')}`;
+  const now = new Date();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const period = `${prefix}-${now.getFullYear()}${month}`;
+  await tx.$queryRaw`SELECT 1 FROM pg_advisory_xact_lock(hashtext(${period}))`;
+  const [{ sequence }] = await tx.$queryRaw<{ sequence: number }[]>`
+    SELECT COALESCE(MAX(substring(numero from '[0-9]+$')::integer), 0) + 1 AS sequence
+    FROM orders WHERE numero LIKE ${period + '-%'}
+  `;
+  return `${period}-${String(sequence).padStart(4, '0')}`;
 }
 
 // Función para calcular totales de una orden
@@ -91,6 +80,117 @@ const orderCountedWhere: Prisma.OrderWhereInput = {
   estado: { notIn: EXCLUDED_FROM_SALES_KPI },
 };
 
+const orderRelations = {
+  vendedor: { select: { id: true, nombre: true } },
+  payments: { orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] },
+} satisfies Prisma.OrderInclude;
+
+const orderDetail = {
+  ...orderRelations,
+  cliente: true,
+  sucursal: true,
+  items: { include: { product: true } },
+} satisfies Prisma.OrderInclude;
+
+type OrderItemInput = {
+  productId: number;
+  cantidad: number;
+  precioUnitario: number;
+  descuento?: number;
+};
+
+type CreateOrder = {
+  clienteId: string;
+  sucursalId: string;
+  canal: OrderChannel;
+  tipoDocumento: DocType;
+  items: OrderItemInput[];
+  descuentoGeneral?: number;
+  costoEnvio?: number;
+  estado?: OrderStatus;
+  payments?: PaymentInput[];
+};
+
+type UpdateOrder = Partial<Pick<CreateOrder,
+  'estado' | 'canal' | 'tipoDocumento' | 'items' | 'descuentoGeneral' | 'costoEnvio'
+>>;
+
+function orderItems(items: OrderItemInput[]) {
+  return items.map((item) => {
+    const subtotal = item.precioUnitario * item.cantidad;
+    const descuento = item.descuento ?? 0;
+    return { ...item, descuento, subtotal, total: subtotal - descuento };
+  });
+}
+
+async function deductOrderStock(tx: Prisma.TransactionClient, order: {
+  id: string;
+  numero: string;
+  sucursalId: string;
+  items: { productId: number; cantidad: number }[];
+}, userId: string) {
+  for (const item of [...order.items].sort((a, b) => a.productId - b.productId)) {
+    await applyStockChange(tx, {
+      productId: item.productId,
+      branchId: order.sucursalId,
+      quantity: -item.cantidad,
+      type: 'venta',
+      reason: `Venta orden ${order.numero}`,
+      refType: 'order',
+      refId: order.id,
+      userId,
+    });
+  }
+}
+
+async function createOrder(
+  tx: Prisma.TransactionClient,
+  data: CreateOrder,
+  vendedorId: string,
+  cashSessionId?: string
+) {
+  const cliente = await tx.customer.findFirst({ where: { id: data.clienteId, deletedAt: null } });
+  if (!cliente) {
+    throw new AppError(ErrorCodes.CUSTOMER_NOT_FOUND, `Cliente con ID ${data.clienteId} no encontrado`, 404);
+  }
+  const sucursal = await tx.branch.findFirst({ where: { id: data.sucursalId, deletedAt: null } });
+  if (!sucursal) {
+    throw new AppError(ErrorCodes.BRANCH_NOT_FOUND, `Sucursal con ID ${data.sucursalId} no encontrada`, 404);
+  }
+
+  const totals = calculateOrderTotals(data.items, data.descuentoGeneral, data.costoEnvio);
+  if (totals.total <= 0 || Object.values(totals).some((value) => value > 2147483647)) {
+    throw new AppError(ErrorCodes.BAD_REQUEST, 'Total de orden fuera de rango', 400);
+  }
+  const payment = data.payments && preparePayments(data.payments, totals.total, cashSessionId);
+  const numero = await generateOrderNumber(tx);
+
+  const order = await tx.order.create({
+    data: {
+      numero,
+      vendedorId,
+      clienteId: data.clienteId,
+      sucursalId: data.sucursalId,
+      canal: data.canal,
+      tipoDocumento: data.tipoDocumento,
+      estado: data.estado ?? 'pendiente',
+      descuentoGeneral: data.descuentoGeneral,
+      costoEnvio: data.costoEnvio,
+      ...totals,
+      items: { create: orderItems(data.items) },
+      payments: payment && { create: payment.applied },
+    },
+    include: { items: true },
+  });
+
+  if (order.estado === 'completada') await deductOrderStock(tx, order, vendedorId);
+  const result = await tx.order.findUniqueOrThrow({ where: { id: order.id }, include: orderDetail });
+  return {
+    ...result,
+    ...(payment && { amountTendered: payment.amountTendered, change: payment.change }),
+  };
+}
+
 export const orderService = {
   async list(params: PaginationParams & {
     estado?: string;
@@ -130,6 +230,10 @@ export const orderService = {
 
     if (filters.clienteId) {
       where.clienteId = filters.clienteId;
+    }
+
+    if (filters.usuarioId) {
+      where.vendedorId = filters.usuarioId;
     }
 
     if (filters.sucursalId) {
@@ -181,6 +285,7 @@ export const orderService = {
         skip: (page - 1) * pageSize,
         take: pageSize,
         include: {
+          ...orderRelations,
           cliente: {
             select: {
               id: true,
@@ -221,21 +326,7 @@ export const orderService = {
         id,
         deletedAt: null,
       },
-      include: {
-        cliente: true,
-        sucursal: {
-          select: {
-            id: true,
-            nombre: true,
-            codigo: true,
-          },
-        },
-        items: {
-          include: {
-            product: true,
-          },
-        },
-      },
+      include: orderDetail,
     });
 
     if (!order) {
@@ -249,296 +340,109 @@ export const orderService = {
     return order;
   },
 
-  async create(data: {
-    clienteId: string;
-    sucursalId: string;
-    canal: OrderChannel;
-    tipoDocumento: string;
-    items: Array<{
-      productId: number;
-      cantidad: number;
-      precioUnitario: number;
-      descuento?: number;
-    }>;
-    descuentoGeneral?: number;
-    costoEnvio?: number;
-    estado?: OrderStatus;
-  }) {
-    // Verificar que el cliente existe
-    const cliente = await db.customer.findUnique({
-      where: { id: data.clienteId },
+  create(data: CreateOrder, vendedorId: string) {
+    return db.$transaction(async (tx) => {
+      const productIds = [...new Set(data.items.map(({ productId }) => productId))];
+      const products = await tx.product.count({
+        where: { id: { in: productIds }, activo: true, deletedAt: null },
+      });
+      if (products !== productIds.length) {
+        throw new AppError(ErrorCodes.PRODUCT_NOT_FOUND, 'Uno o más productos no encontrados o inactivos', 404);
+      }
+      return createOrder(tx, data, vendedorId);
     });
-
-    if (!cliente) {
-      throw new AppError(
-        ErrorCodes.CUSTOMER_NOT_FOUND,
-        `Cliente con ID ${data.clienteId} no encontrado`,
-        404
-      );
-    }
-
-    // Verificar que la sucursal existe
-    const sucursal = await db.branch.findUnique({
-      where: { id: data.sucursalId },
-    });
-
-    if (!sucursal) {
-      throw new AppError(
-        ErrorCodes.BRANCH_NOT_FOUND,
-        `Sucursal con ID ${data.sucursalId} no encontrada`,
-        404
-      );
-    }
-
-    // Verificar que los productos existen
-    const productIds = data.items.map((item) => item.productId);
-    const products = await db.product.findMany({
-      where: {
-        id: { in: productIds },
-        activo: true,
-        deletedAt: null,
-      },
-    });
-
-    if (products.length !== productIds.length) {
-      throw new AppError(
-        ErrorCodes.PRODUCT_NOT_FOUND,
-        'Uno o más productos no encontrados o inactivos',
-        404
-      );
-    }
-
-    // Calcular totales
-    const totals = calculateOrderTotals(
-      data.items,
-      data.descuentoGeneral || 0,
-      data.costoEnvio || 0
-    );
-
-    // Generar número de orden
-    const numero = await generateOrderNumber();
-
-    // Crear orden con items
-    const order = await db.order.create({
-      data: {
-        numero,
-        clienteId: data.clienteId,
-        sucursalId: data.sucursalId,
-        canal: data.canal,
-        tipoDocumento: data.tipoDocumento as any,
-        estado: data.estado || 'pendiente',
-        subtotal: totals.subtotal,
-        descuentoGeneral: data.descuentoGeneral || 0,
-        subtotalConDescuento: totals.subtotalConDescuento,
-        montoIva: totals.montoIva,
-        costoEnvio: data.costoEnvio || 0,
-        total: totals.total,
-        items: {
-          create: data.items.map((item) => {
-            const itemSubtotal = item.precioUnitario * item.cantidad;
-            const itemDescuento = item.descuento || 0;
-            const itemTotal = itemSubtotal - itemDescuento;
-
-            return {
-              productId: item.productId,
-              cantidad: item.cantidad,
-              precioUnitario: item.precioUnitario,
-              descuento: itemDescuento,
-              subtotal: itemSubtotal,
-              total: itemTotal,
-            };
-          }),
-        },
-      },
-      include: {
-        cliente: true,
-        sucursal: true,
-        items: {
-          include: {
-            product: true,
-          },
-        },
-      },
-    });
-
-    return order;
   },
 
-  async update(id: string, data: {
-    estado?: OrderStatus;
-    canal?: OrderChannel;
-    tipoDocumento?: string;
-    items?: Array<{
-      productId: number;
-      cantidad: number;
-      precioUnitario: number;
-      descuento?: number;
-    }>;
-    descuentoGeneral?: number;
-    costoEnvio?: number;
-  }) {
-    const existing = await this.getById(id);
+  createPos(data: {
+    clienteId: string;
+    sucursalId?: string;
+    items: { productId: number; cantidad: number }[];
+    payments: PaymentInput[];
+  }, vendedorId: string) {
+    return db.$transaction(async (tx) => {
+      const sucursalId = data.sucursalId ?? await userBranchId(tx, vendedorId);
+      const cashSessionId = await lockOpenCashSession(tx, sucursalId, vendedorId);
+      const products = await tx.product.findMany({
+        where: { id: { in: data.items.map(({ productId }) => productId) }, deletedAt: null, activo: true },
+        select: { id: true, precio: true },
+      });
+      const prices = new Map(products.map(({ id, precio }) => [id, precio]));
+      const items = data.items.map((item) => {
+        const precioUnitario = prices.get(item.productId);
+        if (precioUnitario === undefined) {
+          throw new AppError(ErrorCodes.PRODUCT_NOT_FOUND, `Producto ${item.productId} no disponible`, 404);
+        }
+        return { ...item, precioUnitario };
+      });
 
-    // Validar transición de estado
-    if (data.estado && data.estado !== existing.estado) {
-      if (!validateStateTransition(existing.estado, data.estado)) {
+      return createOrder(tx, {
+        ...data,
+        sucursalId,
+        items,
+        canal: 'tienda_fisica',
+        tipoDocumento: 'boleta',
+        estado: 'completada',
+      }, vendedorId, cashSessionId);
+    });
+  },
+
+  update(id: string, data: UpdateOrder, userId: string) {
+    return db.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM orders WHERE id = ${id} FOR NO KEY UPDATE`;
+      const existing = await tx.order.findFirst({
+        where: { id, deletedAt: null },
+        include: { items: true, payments: true },
+      });
+      if (!existing) {
+        throw new AppError(ErrorCodes.ORDER_NOT_FOUND, `Orden con ID ${id} no encontrada`, 404);
+      }
+
+      const { items, descuentoGeneral, costoEnvio, estado, ...fields } = data;
+      const changesTotal = items !== undefined || descuentoGeneral !== undefined || costoEnvio !== undefined;
+      if (estado && estado !== existing.estado && !validateStateTransition(existing.estado, estado)) {
         throw new AppError(
           ErrorCodes.INVALID_ORDER_STATE,
-          `No se puede cambiar el estado de '${existing.estado}' a '${data.estado}'`,
+          `No se puede cambiar el estado de '${existing.estado}' a '${estado}'`,
           422
         );
       }
-
-      // Validar reglas de negocio
-      if (['completada', 'cancelada', 'reembolsada'].includes(existing.estado)) {
-        throw new AppError(
-          ErrorCodes.ORDER_ALREADY_PROCESSED,
-          'No se puede modificar una orden ya procesada',
-          422
-        );
+      if (changesTotal && existing.estado === 'completada') {
+        throw new AppError(ErrorCodes.ORDER_ALREADY_PROCESSED, 'No se puede modificar una orden ya procesada', 422);
       }
-    }
 
-    // Si se actualizan items, recalcular totales
-    let totals = {
-      subtotal: existing.subtotal,
-      subtotalConDescuento: existing.subtotalConDescuento,
-      montoIva: existing.montoIva,
-      total: existing.total,
-    };
-
-    if (data.items) {
-      totals = calculateOrderTotals(
-        data.items,
-        data.descuentoGeneral !== undefined ? data.descuentoGeneral : existing.descuentoGeneral,
-        data.costoEnvio !== undefined ? data.costoEnvio : existing.costoEnvio
-      );
-
-      // Eliminar items existentes y crear nuevos
-      await db.orderItem.deleteMany({
-        where: { orderId: id },
-      });
-    }
-
-    // Al pasar a 'completada', descontar inventario (sucursal o, si no hay, stock global)
-    if (data.estado === 'completada' && existing.estado !== 'completada') {
-      const itemsToDeduct = data.items ?? existing.items;
-      for (const item of itemsToDeduct) {
-        try {
-          await inventoryService.adjustInventory({
-            productoId: item.productId,
-            branchId: existing.sucursalId,
-            cantidad: item.cantidad,
-            motivo: `Venta orden ${existing.numero}`,
-            tipo: 'salida',
-          });
-        } catch (err: any) {
-          // Si no hay stock en sucursal (StockByBranch 0 o inexistente), usar stock global
-          if (err?.code === ErrorCodes.INSUFFICIENT_STOCK) {
-            await inventoryService.adjustInventory({
-              productoId: item.productId,
-              cantidad: item.cantidad,
-              motivo: `Venta orden ${existing.numero} (sucursal sin stock)`,
-              tipo: 'salida',
-            });
-          } else {
-            throw err;
-          }
-        }
+      const totals = changesTotal ? calculateOrderTotals(
+        items ?? existing.items,
+        descuentoGeneral ?? existing.descuentoGeneral,
+        costoEnvio ?? existing.costoEnvio
+      ) : undefined;
+      if (totals && existing.payments.length && totals.total !== existing.total) {
+        throw new AppError(ErrorCodes.BAD_REQUEST, 'La suma de los pagos debe coincidir con el total de la orden', 400);
       }
-    }
 
-    const updateData: any = {
-      ...(data.estado !== undefined && { estado: data.estado }),
-      ...(data.canal !== undefined && { canal: data.canal }),
-      ...(data.tipoDocumento !== undefined && { tipoDocumento: data.tipoDocumento as any }),
-      ...(data.descuentoGeneral !== undefined && { descuentoGeneral: data.descuentoGeneral }),
-      ...(data.costoEnvio !== undefined && { costoEnvio: data.costoEnvio }),
-    };
-
-    // Actualizar totales si se modificaron items
-    if (data.items) {
-      updateData.subtotal = totals.subtotal;
-      updateData.subtotalConDescuento = totals.subtotalConDescuento;
-      updateData.montoIva = totals.montoIva;
-      updateData.total = totals.total;
-    } else if (data.descuentoGeneral !== undefined || data.costoEnvio !== undefined) {
-      // Recalcular si solo cambió descuento o envío
-      const items = await db.orderItem.findMany({
-        where: { orderId: id },
-      });
-
-      totals = calculateOrderTotals(
-        items.map((item) => ({
-          cantidad: item.cantidad,
-          precioUnitario: item.precioUnitario,
-          descuento: item.descuento,
-        })),
-        data.descuentoGeneral !== undefined ? data.descuentoGeneral : existing.descuentoGeneral,
-        data.costoEnvio !== undefined ? data.costoEnvio : existing.costoEnvio
-      );
-
-      updateData.subtotal = totals.subtotal;
-      updateData.subtotalConDescuento = totals.subtotalConDescuento;
-      updateData.montoIva = totals.montoIva;
-      updateData.total = totals.total;
-    }
-
-    const order = await db.order.update({
-      where: { id },
-      data: {
-        ...updateData,
-        ...(data.items && {
-          items: {
-            create: data.items.map((item) => {
-              const itemSubtotal = item.precioUnitario * item.cantidad;
-              const itemDescuento = item.descuento || 0;
-              const itemTotal = itemSubtotal - itemDescuento;
-
-              return {
-                productId: item.productId,
-                cantidad: item.cantidad,
-                precioUnitario: item.precioUnitario,
-                descuento: itemDescuento,
-                subtotal: itemSubtotal,
-                total: itemTotal,
-              };
-            }),
-          },
-        }),
-      },
-      include: {
-        cliente: true,
-        sucursal: true,
-        items: {
-          include: {
-            product: true,
-          },
+      if (estado === 'completada' && existing.estado !== 'completada') {
+        await deductOrderStock(tx, { ...existing, items: items ?? existing.items }, userId);
+      }
+      if (items) await tx.orderItem.deleteMany({ where: { orderId: id } });
+      return tx.order.update({
+        where: { id },
+        data: {
+          ...fields, ...totals, estado, descuentoGeneral, costoEnvio,
+          items: items && { create: orderItems(items) },
         },
-      },
+        include: orderDetail,
+      });
     });
-
-    return order;
   },
 
-  async delete(id: string) {
-    const order = await this.getById(id);
-
-    // Validar que no esté en estado final
-    if (['completada', 'cancelada', 'reembolsada'].includes(order.estado)) {
-      throw new AppError(
-        ErrorCodes.ORDER_ALREADY_PROCESSED,
-        'No se puede eliminar una orden ya procesada',
-        422
-      );
-    }
-
-    // Soft delete
-    await db.order.update({
-      where: { id },
-      data: {
-        deletedAt: new Date(),
-      },
+  delete(id: string) {
+    return db.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM orders WHERE id = ${id} FOR NO KEY UPDATE`;
+      const order = await tx.order.findFirst({ where: { id, deletedAt: null } });
+      if (!order) throw new AppError(ErrorCodes.ORDER_NOT_FOUND, `Orden con ID ${id} no encontrada`, 404);
+      if (['completada', 'cancelada', 'reembolsada'].includes(order.estado)) {
+        throw new AppError(ErrorCodes.ORDER_ALREADY_PROCESSED, 'No se puede eliminar una orden ya procesada', 422);
+      }
+      await tx.order.update({ where: { id }, data: { deletedAt: new Date() } });
     });
   },
 
@@ -629,7 +533,7 @@ export const orderService = {
     return rows.map((o) => ({
       id: o.id,
       numero: o.numero,
-      cliente: `${o.cliente.nombre} ${o.cliente.apellido}`.trim(),
+      cliente: `${o.cliente.nombre} ${o.cliente.apellido ?? ''}`.trim(),
       total: o.total,
       estado: o.estado,
       fecha: o.fechaCreacion.toISOString(),
@@ -654,7 +558,7 @@ export const orderService = {
       const c = map.get(g.clienteId);
       return {
         clienteId: g.clienteId,
-        nombre: c ? `${c.nombre} ${c.apellido}`.trim() : g.clienteId,
+        nombre: c ? `${c.nombre} ${c.apellido ?? ''}`.trim() : g.clienteId,
         totalCompras: g._sum.total ?? 0,
       };
     });

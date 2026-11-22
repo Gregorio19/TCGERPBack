@@ -10,8 +10,8 @@
 ## Moneda
 
 - **Moneda**: CLP (Pesos Chilenos)
-- **Formato**: Enteros (centavos)
-- **Ejemplo**: $1.000 CLP se representa como `100000` (100.000 centavos)
+- **Formato**: Pesos chilenos enteros
+- **Ejemplo**: $1.000 CLP se representa como `1000`
 - **Tipo**: `integer` con `format: int64` en OpenAPI
 
 ## Identificadores

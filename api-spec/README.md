@@ -105,7 +105,7 @@ Datos de ejemplo consolidados:
 - Usuarios y roles
 
 **Notas:**
-- Precios en centavos CLP
+- Precios en pesos chilenos enteros
 - IDs UUID v4 (excepto productos legacy)
 - Fechas ISO 8601 UTC
 - Relaciones coherentes entre recursos
@@ -113,7 +113,7 @@ Datos de ejemplo consolidados:
 ### 8. `conventions.md`
 Estándares de la API:
 - Formato de fechas (ISO 8601 UTC)
-- Moneda (CLP en centavos)
+- Moneda (CLP en pesos enteros)
 - Identificadores (UUID v4)
 - Soft delete
 - Búsqueda de texto
@@ -194,7 +194,7 @@ POST /customers/export
 
 ## Notas
 
-- Los precios en el frontend se muestran en pesos CLP, pero en la API se manejan en centavos (enteros)
+- El frontend y la API expresan precios en pesos chilenos enteros.
 - Los productos usan IDs numéricos (legacy), el resto usa UUIDs
 - Las fechas siempre en ISO 8601 UTC
 - Soft delete recomendado para recursos críticos

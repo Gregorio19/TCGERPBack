@@ -2,6 +2,7 @@ import { PrismaClient } from '@prisma/client';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { hashPassword } from '../src/lib/auth.js';
+import { applyStockChange } from '../src/modules/inventory/stock.js';
 
 
 const prisma = new PrismaClient();
@@ -176,31 +177,44 @@ async function main() {
 
   // 5. Products
   if (!isProd) console.log('🃏 Creando productos...');
+  const seedCashier = seeds.users.find((user: { username: string }) => user.username === 'admin');
   for (const product of seeds.products) {
-    await prisma.product.upsert({
-      where: { id: product.id },
-      update: {},
-      create: {
-        id: product.id,
-        nombre: product.nombre,
-        descripcion: product.descripcion,
-        sku: product.sku,
-        juego: product.juego,
-        set: product.set,
-        nroColeccionista: product.nro_coleccionista,
-        rareza: product.rareza,
-        idioma: product.idioma,
-        condicion: product.condicion,
-        tipo: product.tipo,
-        precio: product.precio,
-        precioCompra: product.precio_compra,
-        iva: product.iva || 19,
-        stock: product.stock,
-        categoria: product.categoria,
-        imagen: product.imagen,
-        imagenes: product.imagenes || [],
-        activo: product.activo,
-      },
+    await prisma.$transaction(async (tx) => {
+      const existing = await tx.product.findUnique({ where: { id: product.id }, select: { id: true } });
+      if (existing) return;
+
+      const created = await tx.product.create({
+        data: {
+          id: product.id,
+          nombre: product.nombre,
+          descripcion: product.descripcion,
+          sku: product.sku,
+          juego: product.juego,
+          set: product.set,
+          nroColeccionista: product.nro_coleccionista,
+          rareza: product.rareza,
+          idioma: product.idioma,
+          condicion: product.condicion,
+          tipo: product.tipo,
+          precio: product.precio,
+          precioCompra: product.precio_compra,
+          iva: product.iva || 19,
+          categoria: product.categoria,
+          imagen: product.imagen,
+          imagenes: product.imagenes || [],
+          activo: product.activo,
+        },
+      });
+      if (product.stock > 0) {
+        await applyStockChange(tx, {
+          productId: created.id,
+          branchId: seedCashier.sucursalId,
+          userId: seedCashier.id,
+          type: 'ajuste',
+          quantity: product.stock,
+          reason: 'Stock inicial del seed',
+        });
+      }
     });
   }
 

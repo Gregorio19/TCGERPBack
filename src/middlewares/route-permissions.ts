@@ -1,5 +1,9 @@
+export const AUTHENTICATED_ONLY = Symbol('authenticated-only');
+
+type RoutePermission = string | typeof AUTHENTICATED_ONLY;
+
 // Cada entrada usa el método y la plantilla registrada en Hono, con sus prefijos.
-export const routePermissions: ReadonlyMap<string, string> = new Map([
+export const routePermissions: ReadonlyMap<string, RoutePermission> = new Map<string, RoutePermission>([
   // products
   ['GET /api/products', 'products.view'],
   ['GET /api/products/inactive', 'products.view'],
@@ -13,6 +17,7 @@ export const routePermissions: ReadonlyMap<string, string> = new Map([
   ['PATCH /api/products/:id/stock', 'inventory.edit'],
 
   // inventory
+  ['GET /api/inventory/movements', 'inventory.view'],
   ['GET /api/inventory', 'inventory.view'],
   ['GET /api/inventory/stats', 'inventory.view'],
   ['GET /api/inventory/alerts', 'inventory.view'],
@@ -36,6 +41,13 @@ export const routePermissions: ReadonlyMap<string, string> = new Map([
   ['PUT /api/sales/:id', 'sales.edit'],
   ['PATCH /api/sales/:id/status', 'sales.edit'],
   ['DELETE /api/sales/:id', 'sales.delete'],
+
+  // cash sessions
+  ['POST /api/cash-sessions/open', 'sales.create'],
+  ['GET /api/cash-sessions/current', 'sales.view'],
+  ['POST /api/cash-sessions/:id/close', 'sales.create'],
+  ['GET /api/cash-sessions/:id/summary', 'sales.view'],
+  ['GET /api/cash-sessions', 'sales.view'],
 
   // orders
   ['GET /api/orders', 'sales.view'],
@@ -90,6 +102,7 @@ export const routePermissions: ReadonlyMap<string, string> = new Map([
   ['GET /api/accounting/stats/period/:periodo', 'accounting.view'],
 
   // hr
+  ['GET /api/hr/me', AUTHENTICATED_ONLY],
   ['GET /api/hr/employees/estadisticas', 'hr.view'],
   ['GET /api/hr/employees', 'hr.view'],
   ['POST /api/hr/employees', 'hr.create'],

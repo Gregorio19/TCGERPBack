@@ -2,17 +2,20 @@ import { db } from '../../lib/db.js';
 import { AppError, ErrorCodes } from '../../lib/errors.js';
 import { PaginationParams, buildPaginatedResponse } from '../../lib/pagination.js';
 import { Prisma, ReceptionStatus } from '@prisma/client';
+import { applyStockChange } from '../inventory/stock.js';
 
 // Función para generar número de recepción único
-async function generateReceptionNumber(): Promise<string> {
+async function generateReceptionNumber(tx: Prisma.TransactionClient): Promise<string> {
   const prefix = 'REC';
   const now = new Date();
   const dateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`;
   
-  const lastReception = await db.reception.findFirst({
+  const period = `${prefix}-${dateStr}`;
+  await tx.$queryRaw`SELECT 1 FROM pg_advisory_xact_lock(hashtext(${period}))`;
+  const lastReception = await tx.reception.findFirst({
     where: {
       numero: {
-        startsWith: `${prefix}-${dateStr}`,
+        startsWith: `${period}-`,
       },
     },
     orderBy: {
@@ -27,6 +30,24 @@ async function generateReceptionNumber(): Promise<string> {
   }
 
   return `${prefix}-${dateStr}-${String(sequence).padStart(4, '0')}`;
+}
+
+async function applyReceptionStock(
+  tx: Prisma.TransactionClient,
+  reception: Prisma.ReceptionGetPayload<{ include: { items: true } }>,
+  userId: string
+) {
+  for (const item of [...reception.items].sort((a, b) => a.productId - b.productId)) {
+    await applyStockChange(tx, {
+      productId: item.productId,
+      branchId: reception.sucursalId,
+      quantity: item.cantidad,
+      type: 'recepcion',
+      refType: 'reception',
+      refId: reception.id,
+      userId,
+    });
+  }
 }
 
 export const receptionService = {
@@ -94,8 +115,8 @@ export const receptionService = {
     return buildPaginatedResponse(data, total, page, pageSize);
   },
 
-  async getById(id: string) {
-    const reception = await db.reception.findFirst({
+  async getById(id: string, tx: Prisma.TransactionClient = db) {
+    const reception = await tx.reception.findFirst({
       where: { id, deletedAt: null },
       include: {
         proveedor: true,
@@ -113,24 +134,17 @@ export const receptionService = {
     return reception;
   },
 
-  async create(data: any) {
-    // 1. Validar proveedor y sucursal
-    const [proveedor, sucursal] = await Promise.all([
-      db.supplier.findUnique({ where: { id: data.proveedorId } }),
-      db.branch.findUnique({ where: { id: data.sucursalId } }),
-    ]);
+  async create(data: any, userId: string) {
+    return db.$transaction(async (tx) => {
+      const [proveedor, sucursal] = await Promise.all([
+        tx.supplier.findUnique({ where: { id: data.proveedorId } }),
+        tx.branch.findUnique({ where: { id: data.sucursalId } }),
+      ]);
+      if (!proveedor) throw new AppError(ErrorCodes.NOT_FOUND, 'Proveedor no encontrado', 404);
+      if (!sucursal) throw new AppError(ErrorCodes.NOT_FOUND, 'Sucursal no encontrada', 404);
 
-    if (!proveedor) throw new AppError(ErrorCodes.NOT_FOUND, 'Proveedor no encontrado', 404);
-    if (!sucursal) throw new AppError(ErrorCodes.NOT_FOUND, 'Sucursal no encontrada', 404);
-
-    // 2. Calcular total
-    const total = data.items.reduce((sum: number, item: any) => sum + (item.cantidad * item.precioUnitario), 0);
-
-    // 3. Generar número
-    const numero = await generateReceptionNumber();
-
-    // 4. Crear recepción en transacción
-    const reception = await db.$transaction(async (tx) => {
+      const total = data.items.reduce((sum: number, item: any) => sum + item.cantidad * item.precioUnitario, 0);
+      const numero = await generateReceptionNumber(tx);
       const rec = await tx.reception.create({
         data: {
           numero,
@@ -156,24 +170,22 @@ export const receptionService = {
       });
 
       // Si se crea como COMPLETADA, actualizar stock inmediatamente
-      if (data.estado === 'COMPLETADA') {
-        await this.updateStockFromReception(rec, tx);
+      if (rec.estado === 'COMPLETADA') {
+        await applyReceptionStock(tx, rec, userId);
       }
 
-      return rec;
+      return this.getById(rec.id, tx);
     });
-
-    return this.getById(reception.id);
   },
 
-  async update(id: string, data: any) {
-    const existing = await this.getById(id);
+  update(id: string, data: any, userId: string) {
+    return db.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM receptions WHERE id = ${id} FOR NO KEY UPDATE`;
+      const existing = await this.getById(id, tx);
+      if (existing.estado === 'COMPLETADA' || existing.estado === 'CANCELADA') {
+        throw new AppError(ErrorCodes.BAD_REQUEST, 'No se puede modificar una recepción ya finalizada', 400);
+      }
 
-    if (existing.estado === 'COMPLETADA' || existing.estado === 'CANCELADA') {
-      throw new AppError(ErrorCodes.BAD_REQUEST, 'No se puede modificar una recepción ya finalizada', 400);
-    }
-
-    return await db.$transaction(async (tx) => {
       // Si hay items nuevos, borrar los anteriores y crear nuevos
       if (data.items) {
         await tx.receptionItem.deleteMany({ where: { receptionId: id } });
@@ -204,61 +216,29 @@ export const receptionService = {
             },
           }),
         },
+        include: { items: true },
       });
 
       // Si el nuevo estado es COMPLETADA, actualizar stock
-      if (data.estado === 'COMPLETADA' && existing.estado !== 'COMPLETADA') {
-        const fullRec = await tx.reception.findUnique({
-          where: { id },
-          include: { items: true }
-        });
-        if (fullRec) await this.updateStockFromReception(fullRec, tx);
-      }
+      if (updated.estado === 'COMPLETADA') await applyReceptionStock(tx, updated, userId);
 
-      return updated;
+      const { items: _items, ...reception } = updated;
+      return reception;
     });
   },
 
-  // Lógica core: Actualizar stock de productos al completar recepción
-  async updateStockFromReception(reception: any, tx: any) {
-    for (const item of reception.items) {
-      // 1. Actualizar StockByBranch
-      await tx.stockByBranch.upsert({
-        where: {
-          productId_branchId: {
-            productId: item.productId,
-            branchId: reception.sucursalId,
-          },
-        },
-        update: {
-          cantidad: { increment: item.cantidad },
-        },
-        create: {
-          productId: item.productId,
-          branchId: reception.sucursalId,
-          cantidad: item.cantidad,
-        },
+  delete(id: string) {
+    return db.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM receptions WHERE id = ${id} FOR NO KEY UPDATE`;
+      const existing = await this.getById(id, tx);
+      if (existing.estado === 'COMPLETADA') {
+        throw new AppError(ErrorCodes.BAD_REQUEST, 'No se puede eliminar una recepción completada', 400);
+      }
+
+      await tx.reception.update({
+        where: { id },
+        data: { deletedAt: new Date() },
       });
-
-      // 2. Actualizar stock general del producto
-      await tx.product.update({
-        where: { id: item.productId },
-        data: {
-          stock: { increment: item.cantidad },
-        },
-      });
-    }
-  },
-
-  async delete(id: string) {
-    const existing = await this.getById(id);
-    if (existing.estado === 'COMPLETADA') {
-      throw new AppError(ErrorCodes.BAD_REQUEST, 'No se puede eliminar una recepción completada', 400);
-    }
-
-    await db.reception.update({
-      where: { id },
-      data: { deletedAt: new Date() },
     });
   },
 };

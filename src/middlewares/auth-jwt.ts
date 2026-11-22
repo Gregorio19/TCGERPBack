@@ -20,3 +20,5 @@ export const authJWT = async (c: Context, next: Next) => {
   c.set('user', payload);
   await next();
 };
+
+export const getAuthUser = (c: Context): JWTPayload => c.get('user');

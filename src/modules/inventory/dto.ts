@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { clpSchema } from '../../lib/validation.js';
+import { StockMovementType } from '@prisma/client';
 
 // Enum para tipo de ajuste
 export const AdjustmentTypeEnum = z.enum(['entrada', 'salida']);
@@ -19,7 +19,7 @@ export const updateStockDto = z.object({
 // DTO para ajuste de inventario
 export const inventoryAdjustmentDto = z.object({
   productoId: z.number().int().positive(),
-  branchId: z.string().uuid().optional(), // Si no se especifica, ajusta stock general
+  branchId: z.string().uuid().optional(), // Si no se especifica, utiliza la sucursal del usuario
   cantidad: z.number().int().min(1),
   motivo: z.string().min(1).max(500),
   tipo: AdjustmentTypeEnum,
@@ -60,3 +60,13 @@ export const locationParamDto = z.object({
   location: z.string(),
 });
 
+
+const positiveInteger = z.coerce.number().int().positive();
+
+export const listMovementsQueryDto = z.object({
+  productId: positiveInteger.max(2147483647).optional(),
+  branchId: z.string().uuid().optional(),
+  type: z.nativeEnum(StockMovementType).optional(),
+  page: positiveInteger.max(2147483647).default(1),
+  pageSize: positiveInteger.max(100).default(25),
+});

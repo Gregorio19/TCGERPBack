@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { authJWT } from '../../middlewares/auth-jwt.js';
+import { authJWT, getAuthUser } from '../../middlewares/auth-jwt.js';
 import { rbacGuard } from '../../middlewares/rbac-guard.js';
 import { validateBody, validateQuery, validateParams } from '../../lib/validation.js';
 import {
@@ -53,7 +53,7 @@ recepcionesRouter.post(
   validateBody(createReceptionDto),
   async (c) => {
     const data = (c as any).get('validatedBody') as z.infer<typeof createReceptionDto>;
-    const reception = await receptionService.create(data);
+    const reception = await receptionService.create(data, getAuthUser(c).userId);
     return created(c, reception);
   }
 );
@@ -81,7 +81,7 @@ recepcionesRouter.put(
   async (c) => {
     const { id } = (c as any).get('validatedParams') as { id: string };
     const data = (c as any).get('validatedBody') as z.infer<typeof updateReceptionDto>;
-    const reception = await receptionService.update(id, data);
+    const reception = await receptionService.update(id, data, getAuthUser(c).userId);
     return ok(c, reception);
   }
 );

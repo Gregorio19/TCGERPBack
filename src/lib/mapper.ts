@@ -6,7 +6,7 @@ export const toISOString = (date: Date | string | null | undefined): string | nu
   return dayjs(date).toISOString();
 };
 
-// Mapear CLP (centavos) a entero
+// Mapear montos en pesos chilenos enteros
 export const toCLP = (amount: number | null | undefined): number => {
   if (amount === null || amount === undefined) return 0;
   return Math.round(amount);

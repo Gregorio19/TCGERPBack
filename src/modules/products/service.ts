@@ -2,6 +2,7 @@ import { db } from '../../lib/db.js';
 import { AppError, ErrorCodes } from '../../lib/errors.js';
 import { PaginationParams, buildPaginatedResponse } from '../../lib/pagination.js';
 import { Prisma } from '@prisma/client';
+import { applyStockChange, userBranchId } from '../inventory/stock.js';
 
 export const productService = {
   async list(params: PaginationParams & {
@@ -190,7 +191,7 @@ export const productService = {
     return product;
   },
 
-  async create(data: any) {
+  async create(data: any, userId: string) {
     // Verificar SKU único si existe
     if (data.sku) {
       const existing = await db.product.findUnique({
@@ -220,33 +221,42 @@ export const productService = {
         : undefined,
     };
 
-    const product = await db.product.create({
-      data: {
-        nombre: cleanData.nombre,
-        descripcion: cleanData.descripcion,
-        sku: cleanData.sku,
-        juego: cleanData.juego,
-        set: cleanData.set,
-        nroColeccionista: cleanData.nro_coleccionista,
-        rareza: cleanData.rareza,
-        idioma: cleanData.idioma,
-        condicion: cleanData.condicion,
-        tipo: cleanData.tipo,
-        precio: cleanData.precio,
-        precioCompra: cleanData.precio_compra,
-        iva: cleanData.iva || 19,
-        stock: cleanData.stock,
-        categoria: cleanData.categoria,
-        imagen: cleanData.imagen,
-        imagenes: cleanData.imagenes || [],
-        activo: cleanData.activo !== undefined ? cleanData.activo : true,
-      },
+    return db.$transaction(async (tx) => {
+      const product = await tx.product.create({
+        data: {
+          nombre: cleanData.nombre,
+          descripcion: cleanData.descripcion,
+          sku: cleanData.sku,
+          juego: cleanData.juego,
+          set: cleanData.set,
+          nroColeccionista: cleanData.nro_coleccionista,
+          rareza: cleanData.rareza,
+          idioma: cleanData.idioma,
+          condicion: cleanData.condicion,
+          tipo: cleanData.tipo,
+          precio: cleanData.precio,
+          precioCompra: cleanData.precio_compra,
+          iva: cleanData.iva || 19,
+          categoria: cleanData.categoria,
+          imagen: cleanData.imagen,
+          imagenes: cleanData.imagenes || [],
+          activo: cleanData.activo !== undefined ? cleanData.activo : true,
+        },
+      });
+      if (!cleanData.stock) return product;
+      const result = await applyStockChange(tx, {
+        productId: product.id,
+        branchId: await userBranchId(tx, userId),
+        quantity: cleanData.stock,
+        userId,
+        type: 'ajuste',
+        reason: 'Stock inicial',
+      });
+      return result.product;
     });
-
-    return product;
   },
 
-  async update(id: number, data: any) {
+  async update(id: number, data: any, userId: string) {
     // Buscar producto sin filtrar por activo (permite editar productos inactivos)
     const existing = await db.product.findFirst({
       where: {
@@ -300,31 +310,32 @@ export const productService = {
           : undefined,
     };
 
-    const product = await db.product.update({
-      where: { id },
-      data: {
-        ...(cleanData.nombre !== undefined && { nombre: cleanData.nombre }),
-        ...(cleanData.descripcion !== undefined && { descripcion: cleanData.descripcion }),
-        ...(cleanData.sku !== undefined && { sku: cleanData.sku }),
-        ...(cleanData.juego !== undefined && { juego: cleanData.juego }),
-        ...(cleanData.set !== undefined && { set: cleanData.set }),
-        ...(cleanData.nro_coleccionista !== undefined && { nroColeccionista: cleanData.nro_coleccionista }),
-        ...(cleanData.rareza !== undefined && { rareza: cleanData.rareza }),
-        ...(cleanData.idioma !== undefined && { idioma: cleanData.idioma }),
-        ...(cleanData.condicion !== undefined && { condicion: cleanData.condicion }),
-        ...(cleanData.tipo !== undefined && { tipo: cleanData.tipo }),
-        ...(cleanData.precio !== undefined && { precio: cleanData.precio }),
-        ...(cleanData.precio_compra !== undefined && { precioCompra: cleanData.precio_compra }),
-        ...(cleanData.iva !== undefined && { iva: cleanData.iva }),
-        ...(cleanData.stock !== undefined && { stock: cleanData.stock }),
-        ...(cleanData.categoria !== undefined && { categoria: cleanData.categoria }),
-        ...(cleanData.imagen !== undefined && { imagen: cleanData.imagen }),
-        ...(cleanData.imagenes !== undefined && { imagenes: cleanData.imagenes }),
-        ...(cleanData.activo !== undefined && { activo: cleanData.activo }),
-      },
+    return db.$transaction(async (tx) => {
+      const product = await tx.product.update({
+        where: { id, deletedAt: null },
+        data: {
+          ...(cleanData.nombre !== undefined && { nombre: cleanData.nombre }),
+          ...(cleanData.descripcion !== undefined && { descripcion: cleanData.descripcion }),
+          ...(cleanData.sku !== undefined && { sku: cleanData.sku }),
+          ...(cleanData.juego !== undefined && { juego: cleanData.juego }),
+          ...(cleanData.set !== undefined && { set: cleanData.set }),
+          ...(cleanData.nro_coleccionista !== undefined && { nroColeccionista: cleanData.nro_coleccionista }),
+          ...(cleanData.rareza !== undefined && { rareza: cleanData.rareza }),
+          ...(cleanData.idioma !== undefined && { idioma: cleanData.idioma }),
+          ...(cleanData.condicion !== undefined && { condicion: cleanData.condicion }),
+          ...(cleanData.tipo !== undefined && { tipo: cleanData.tipo }),
+          ...(cleanData.precio !== undefined && { precio: cleanData.precio }),
+          ...(cleanData.precio_compra !== undefined && { precioCompra: cleanData.precio_compra }),
+          ...(cleanData.iva !== undefined && { iva: cleanData.iva }),
+          ...(cleanData.categoria !== undefined && { categoria: cleanData.categoria }),
+          ...(cleanData.imagen !== undefined && { imagen: cleanData.imagen }),
+          ...(cleanData.imagenes !== undefined && { imagenes: cleanData.imagenes }),
+          ...(cleanData.activo !== undefined && { activo: cleanData.activo }),
+        },
+      });
+      if (cleanData.stock === undefined) return product;
+      return this.setStock(tx, id, cleanData.stock, userId);
     });
-
-    return product;
   },
 
   async delete(id: number) {
@@ -349,27 +360,19 @@ export const productService = {
     });
   },
 
-  async updateStock(id: number, stock: number) {
-    if (stock < 0) {
-      throw new AppError(ErrorCodes.INVALID_STOCK, 'El stock no puede ser negativo', 422);
-    }
+  updateStock(id: number, stock: number, userId: string) {
+    return db.$transaction((tx) => this.setStock(tx, id, stock, userId));
+  },
 
-    // Buscar producto sin filtrar por activo (permite actualizar stock de productos inactivos)
-    const existing = await db.product.findFirst({
-      where: {
-        id,
-        deletedAt: null,
-      },
+  async setStock(tx: Prisma.TransactionClient, productId: number, stock: number, userId: string) {
+    const result = await applyStockChange(tx, {
+      productId,
+      branchId: await userBranchId(tx, userId),
+      totalBalance: stock,
+      userId,
+      type: 'ajuste',
     });
-
-    if (!existing) {
-      throw new AppError(ErrorCodes.PRODUCT_NOT_FOUND, `Producto con ID ${id} no encontrado`, 404);
-    }
-
-    return db.product.update({
-      where: { id },
-      data: { stock },
-    });
+    return result.product;
   },
 
   async getCategories() {
