@@ -4,7 +4,7 @@ import { PaginationParams, buildPaginatedResponse } from '../../lib/pagination.j
 import { Prisma, OrderStatus, OrderChannel, DocType } from '@prisma/client';
 import { applyStockChange, userBranchId } from '../inventory/stock.js';
 import { lockOpenCashSession } from '../cash-sessions/service.js';
-import { applyStoreCredit } from '../customers/store-credit.js';
+import { applyStoreCredit, requireStoreCreditCustomer } from '../customers/store-credit.js';
 import { preparePayments, type PaymentInput } from './payments.js';
 
 // Función para generar número de orden único
@@ -102,7 +102,7 @@ type OrderItemInput = {
 };
 
 type CreateOrder = {
-  clienteId: string;
+  clienteId?: string;
   sucursalId: string;
   canal: OrderChannel;
   tipoDocumento: DocType;
@@ -151,9 +151,11 @@ async function createOrder(
   vendedorId: string,
   cashSessionId?: string
 ) {
-  const cliente = await tx.customer.findFirst({ where: { id: data.clienteId, deletedAt: null } });
-  if (!cliente) {
-    throw new AppError(ErrorCodes.CUSTOMER_NOT_FOUND, `Cliente con ID ${data.clienteId} no encontrado`, 404);
+  if (data.clienteId) {
+    const cliente = await tx.customer.findFirst({ where: { id: data.clienteId, deletedAt: null } });
+    if (!cliente) {
+      throw new AppError(ErrorCodes.CUSTOMER_NOT_FOUND, `Cliente con ID ${data.clienteId} no encontrado`, 404);
+    }
   }
   const sucursal = await tx.branch.findFirst({ where: { id: data.sucursalId, deletedAt: null } });
   if (!sucursal) {
@@ -193,7 +195,7 @@ async function createOrder(
 
   if (storeCredit > 0) {
     await applyStoreCredit(tx, {
-      customerId: cliente.id, amount: -storeCredit, reason: `Pago orden ${order.numero}`,
+      customerId: requireStoreCreditCustomer(data.clienteId), amount: -storeCredit, reason: `Pago orden ${order.numero}`,
       refType: 'order', refId: order.id, userId: vendedorId,
     });
   }
@@ -207,14 +209,14 @@ async function createOrder(
 
 async function restoreOrderCredit(
   tx: Prisma.TransactionClient,
-  order: { id: string; clienteId: string; numero: string; payments: { method: string; amount: number }[] },
+  order: { id: string; clienteId: string | null; numero: string; payments: { method: string; amount: number }[] },
   userId: string
 ) {
   const amount = order.payments.filter((payment) => payment.method === 'credito_tienda')
     .reduce((sum, payment) => sum + payment.amount, 0);
   if (amount > 0) {
     await applyStoreCredit(tx, {
-      customerId: order.clienteId, amount, reason: `Anulación orden ${order.numero}`,
+      customerId: requireStoreCreditCustomer(order.clienteId), amount, reason: `Anulación orden ${order.numero}`,
       refType: 'order', refId: order.id, userId,
     });
   }
@@ -371,6 +373,9 @@ export const orderService = {
 
   create(data: CreateOrder, vendedorId: string) {
     return db.$transaction(async (tx) => {
+      if (data.payments?.some(({ method }) => method === 'credito_tienda')) {
+        requireStoreCreditCustomer(data.clienteId);
+      }
       const productIds = [...new Set(data.items.map(({ productId }) => productId))];
       const products = await tx.product.count({
         where: { id: { in: productIds }, activo: true, deletedAt: null },
@@ -386,12 +391,15 @@ export const orderService = {
   },
 
   createPos(data: {
-    clienteId: string;
+    clienteId?: string;
     sucursalId?: string;
     items: { productId: number; cantidad: number }[];
     payments: PaymentInput[];
   }, vendedorId: string) {
     return db.$transaction(async (tx) => {
+      if (data.payments.some(({ method }) => method === 'credito_tienda')) {
+        requireStoreCreditCustomer(data.clienteId);
+      }
       const sucursalId = data.sucursalId ?? await userBranchId(tx, vendedorId);
       const cashSessionId = await lockOpenCashSession(tx, sucursalId, vendedorId);
       const products = await tx.product.findMany({
@@ -458,6 +466,9 @@ export const orderService = {
         throw new AppError(ErrorCodes.BAD_REQUEST, 'La suma de los pagos debe coincidir con el total de la orden', 400);
       }
 
+      if (payments?.some(({ method }) => method === 'credito_tienda')) {
+        requireStoreCreditCustomer(existing.clienteId);
+      }
       const cashSessionId = payments?.some(({ method }) => method === 'efectivo')
         ? await lockOpenCashSession(tx, existing.sucursalId, userId)
         : undefined;
@@ -467,7 +478,7 @@ export const orderService = {
         .reduce((sum, { amount }) => sum + amount, 0) ?? 0;
       if (storeCredit > 0) {
         await applyStoreCredit(tx, {
-          customerId: existing.clienteId, amount: -storeCredit, reason: `Pago orden ${existing.numero}`,
+          customerId: requireStoreCreditCustomer(existing.clienteId), amount: -storeCredit, reason: `Pago orden ${existing.numero}`,
           refType: 'order', refId: id, userId,
         });
       }
@@ -597,7 +608,7 @@ export const orderService = {
     return rows.map((o) => ({
       id: o.id,
       numero: o.numero,
-      cliente: `${o.cliente.nombre} ${o.cliente.apellido ?? ''}`.trim(),
+      cliente: o.cliente ? `${o.cliente.nombre} ${o.cliente.apellido ?? ''}`.trim() : 'Consumidor final',
       total: o.total,
       estado: o.estado,
       fecha: o.fechaCreacion.toISOString(),
@@ -607,24 +618,25 @@ export const orderService = {
   async topCustomers(limit: number) {
     const grouped = await db.order.groupBy({
       by: ['clienteId'],
-      where: orderCountedWhere,
+      where: { ...orderCountedWhere, clienteId: { not: null } },
       _sum: { total: true },
       orderBy: { _sum: { total: 'desc' } },
       take: Math.min(Math.max(limit, 1), 25),
     });
-    const ids = grouped.map((g) => g.clienteId);
+    const ids = grouped.flatMap(({ clienteId }) => clienteId === null ? [] : [clienteId]);
     const customers = await db.customer.findMany({
       where: { id: { in: ids }, deletedAt: null },
       select: { id: true, nombre: true, apellido: true },
     });
     const map = new Map(customers.map((c) => [c.id, c]));
-    return grouped.map((g) => {
-      const c = map.get(g.clienteId);
-      return {
-        clienteId: g.clienteId,
-        nombre: c ? `${c.nombre} ${c.apellido ?? ''}`.trim() : g.clienteId,
-        totalCompras: g._sum.total ?? 0,
-      };
+    return grouped.flatMap(({ clienteId, _sum }) => {
+      if (clienteId === null) return [];
+      const c = map.get(clienteId);
+      return [{
+        clienteId,
+        nombre: c ? `${c.nombre} ${c.apellido ?? ''}`.trim() : clienteId,
+        totalCompras: _sum.total ?? 0,
+      }];
     });
   },
 };

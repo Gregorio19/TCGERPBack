@@ -27,8 +27,8 @@ it('POS: exige caja, registra pagos y stock de forma atómica y permite cuadrar 
   const productIds = [productId, secondProductId];
   t.after(async () => {
     await db.$transaction(async (tx) => {
-      await tx.payment.deleteMany({ where: { order: { clienteId: customerId } } });
-      await tx.order.deleteMany({ where: { clienteId: customerId } });
+      await tx.payment.deleteMany({ where: { order: { sucursalId: branchId } } });
+      await tx.order.deleteMany({ where: { sucursalId: branchId } });
       await tx.cashSession.deleteMany({ where: { branchId } });
       await tx.stockMovement.deleteMany({ where: { productId: { in: productIds } } });
       await tx.product.deleteMany({ where: { id: { in: productIds } } });
@@ -215,6 +215,28 @@ it('POS: exige caja, registra pagos y stock de forma atómica y permite cuadrar 
     const paidPending = await expectJson(await post('/api/orders', { ...pendingOrder, payments: cashPayment }), 201);
     assert.equal(paidPending.estado, 'pendiente');
     assert.equal(paidPending.payments[0].cashSessionId, reopened.id);
+  });
+
+  await t.test('completa una venta a consumidor final sin cliente', async () => {
+    const result = await expectJson(await post(salePath, {
+      sucursalId: branchId,
+      items: [{ productId: secondProductId, cantidad: 1 }],
+      payments: [{ method: 'debito', amount: 1190 }],
+    }), 201);
+    assert.equal(result.cliente, null);
+    const order = await db.order.findUniqueOrThrow({ where: { id: result.ordenId } });
+    assert.equal(order.clienteId, null);
+  });
+
+  await t.test('rechaza crédito en tienda sin cliente', async () => {
+    const before = await db.order.count({ where: { sucursalId: branchId } });
+    const error = await expectJson(await post(salePath, {
+      sucursalId: branchId,
+      items: [{ productId, cantidad: 1 }],
+      payments: [{ method: 'credito_tienda', amount: 1190 }],
+    }), 400);
+    assert.equal(error.error.message, 'Crédito en tienda requiere un cliente');
+    assert.equal(await db.order.count({ where: { sucursalId: branchId } }), before);
   });
 });
 

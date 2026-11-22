@@ -5,7 +5,7 @@ import { AppError, ErrorCodes } from '../../lib/errors.js';
 import { uuidSchema } from '../../lib/validation.js';
 import { lockOpenCashSessionForOutflow } from '../cash-sessions/service.js';
 import { applyStockChange } from '../inventory/stock.js';
-import { applyStoreCredit } from '../customers/store-credit.js';
+import { applyStoreCredit, requireStoreCreditCustomer } from '../customers/store-credit.js';
 
 export const createReturnDto = z.object({
   reason: z.string().trim().min(1).max(1000),
@@ -73,6 +73,10 @@ export function createReturn(
       throw new AppError(ErrorCodes.INVALID_ORDER_STATE, 'La orden no admite devoluciones', 409);
     }
 
+    const creditCustomerId = input.refundMethod === 'credito_tienda'
+      ? requireStoreCreditCustomer(order.clienteId)
+      : null;
+
     const previouslyReturned = await tx.returnItem.groupBy({
       by: ['orderItemId'],
       where: { return: { orderId } },
@@ -111,9 +115,9 @@ export function createReturn(
       },
       include: { items: true },
     });
-    if (input.refundMethod === 'credito_tienda') {
+    if (creditCustomerId) {
       await applyStoreCredit(tx, {
-        customerId: order.clienteId, amount: refundAmount, reason: input.reason,
+        customerId: creditCustomerId, amount: refundAmount, reason: input.reason,
         refType: 'return', refId: result.id, userId,
       });
     } else {

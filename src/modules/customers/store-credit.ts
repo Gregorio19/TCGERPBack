@@ -2,6 +2,13 @@ import { Prisma } from '@prisma/client';
 import { db } from '../../lib/db.js';
 import { AppError, ErrorCodes } from '../../lib/errors.js';
 
+export function requireStoreCreditCustomer(customerId: string | null | undefined): string {
+  if (!customerId) {
+    throw new AppError(ErrorCodes.BAD_REQUEST, 'Crédito en tienda requiere un cliente', 400);
+  }
+  return customerId;
+}
+
 export async function applyStoreCredit(
   tx: Prisma.TransactionClient,
   data: Prisma.StoreCreditMovementUncheckedCreateInput

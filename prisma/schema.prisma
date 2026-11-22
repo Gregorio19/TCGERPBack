@@ -368,7 +368,7 @@ model CustomerAttachment {
 model Order {
   id                  String      @id @default(uuid())
   numero              String      @unique @db.VarChar(50)
-  clienteId           String      @map("cliente_id")
+  clienteId           String?     @map("cliente_id")
   vendedorId          String?     @map("vendedor_id")
   estado              OrderStatus @default(pendiente)
   canal               OrderChannel
@@ -385,7 +385,7 @@ model Order {
   deletedAt           DateTime?   @map("deleted_at")
 
   // Relations
-  cliente             Customer    @relation(fields: [clienteId], references: [id])
+  cliente             Customer?   @relation(fields: [clienteId], references: [id])
   sucursal            Branch      @relation(fields: [sucursalId], references: [id])
   items               OrderItem[]
   vendedor            User?       @relation(fields: [vendedorId], references: [id], onDelete: SetNull)

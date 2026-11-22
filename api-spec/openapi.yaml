@@ -422,7 +422,9 @@ components:
       required: [items, reason, refundMethod]
       properties:
         reason: { type: string, minLength: 1, maxLength: 1000 }
-        refundMethod: { $ref: '#/components/schemas/PaymentMethod' }
+        refundMethod:
+          $ref: '#/components/schemas/PaymentMethod'
+          description: El crédito en tienda requiere un cliente asociado a la orden.
         items:
           type: array
           minItems: 1
@@ -736,7 +738,6 @@ components:
     CreateOrderRequest:
       type: object
       required:
-        - clienteId
         - sucursalId
         - canal
         - tipoDocumento
@@ -745,6 +746,7 @@ components:
         clienteId:
           type: string
           format: uuid
+          description: Omítelo para una venta a consumidor final. Requerido para pagos con crédito en tienda.
         sucursalId:
           type: string
           format: uuid
@@ -848,6 +850,14 @@ components:
               type: string
               nullable: true
 
+    OrderCustomer:
+      type: [object, 'null']
+      properties:
+        id: { type: string, format: uuid }
+        nombre: { type: string }
+        apellido: { type: [string, 'null'] }
+        email: { type: [string, 'null'] }
+
     OrderResponse:
       type: object
       properties:
@@ -858,7 +868,7 @@ components:
           type: string
           example: "ORD-202601-0001"
         clienteId:
-          type: string
+          type: [string, 'null']
           format: uuid
         vendedorId: { type: [string, 'null'], format: uuid }
         vendedor:
@@ -903,17 +913,7 @@ components:
           type: string
           format: date-time
         cliente:
-          type: object
-          properties:
-            id:
-              type: string
-              format: uuid
-            nombre:
-              type: string
-            apellido:
-              type: [string, 'null']
-            email:
-              type: [string, 'null']
+          $ref: '#/components/schemas/OrderCustomer'
         sucursal:
           type: object
           properties:
@@ -2571,6 +2571,7 @@ components:
                 description: Número de orden
               cliente:
                 type: string
+                description: Consumidor final para ventas sin cliente asociado.
               total:
                 type: integer
               fecha:
@@ -2716,7 +2717,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/OrderReturn' }
         '400':
-          description: Falta Idempotency-Key o su longitud está fuera de rango
+          description: Falta Idempotency-Key, su longitud está fuera de rango o se solicitó un reembolso en crédito en tienda sin cliente
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorResponse' }
@@ -3959,7 +3960,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/OrderResponse'
         '400':
-          description: Los pagos no cuadran o el total está fuera de rango
+          description: Los pagos no cuadran, el total está fuera de rango o se usó crédito en tienda sin cliente
         '409':
           description: Caja sin abrir, stock de sucursal insuficiente o crédito en tienda insuficiente
         '422':
@@ -4017,7 +4018,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/OrderResponse'
         '400':
-          description: Los pagos deben cubrir el total de la orden actualizado
+          description: Los pagos deben cubrir el total de la orden actualizado y el crédito en tienda requiere un cliente
         '409':
           description: Caja sin abrir, stock de sucursal insuficiente o crédito en tienda insuficiente al completar la orden
         '422':
@@ -4129,7 +4130,7 @@ paths:
             default: 5
       responses:
         '200':
-          description: Lista de ventas recientes
+          description: Lista de ventas recientes. Las ventas sin cliente asociado muestran Consumidor final.
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -4141,7 +4142,7 @@ paths:
       summary: Top clientes
       responses:
         '200':
-          description: Lista de top clientes
+          description: Lista de clientes con mayores compras. Excluye ventas a consumidor final.
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -4188,9 +4189,9 @@ paths:
           application/json:
             schema:
               type: object
-              required: [clienteId, items, payments]
+              required: [items, payments]
               properties:
-                clienteId: { type: string, format: uuid }
+                clienteId: { type: string, format: uuid, description: Omítelo para una venta a consumidor final. }
                 sucursalId: { type: string, format: uuid, description: Por defecto usa la sucursal del vendedor. }
                 items:
                   type: array
@@ -4220,6 +4221,8 @@ paths:
                   numero: { type: string }
                   total: { type: integer }
                   estado: { type: string, const: completada }
+                  cliente:
+                    $ref: '#/components/schemas/OrderCustomer'
                   vendedorId: { type: string, format: uuid }
                   vendedor:
                     $ref: '#/components/schemas/Seller'
@@ -4230,7 +4233,7 @@ paths:
                   amountTendered: { type: integer, description: Efectivo entregado en CLP. }
                   change: { type: integer, description: Vuelto en CLP. }
         '400':
-          description: Los pagos no cuadran o el total está fuera de rango
+          description: Los pagos no cuadran, el total está fuera de rango o se usó crédito en tienda sin cliente
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -4554,7 +4557,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '400':
-          description: Los pagos no cuadran o el total está fuera de rango
+          description: Los pagos no cuadran, el total está fuera de rango o se usó crédito en tienda sin cliente
         '409':
           description: Caja sin abrir, stock de sucursal insuficiente o crédito en tienda insuficiente
         '422':

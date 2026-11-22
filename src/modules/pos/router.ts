@@ -13,7 +13,7 @@ import { paymentsDto } from '../sales/payments.js';
 export const posRouter = new Hono();
 
 const posSaleDto = z.object({
-  clienteId: uuidSchema,
+  clienteId: uuidSchema.optional(),
   sucursalId: uuidSchema.optional(),
   payments: paymentsDto,
   items: z
@@ -54,11 +54,18 @@ posRouter.get('/products', authJWT, rbacGuard, async (c) => {
 posRouter.post('/sale', authJWT, rbacGuard, validateBody(posSaleDto), async (c) => {
   const body = (c as { get: (k: string) => unknown }).get('validatedBody') as z.infer<typeof posSaleDto>;
   const order = await orderService.createPos(body, getAuthUser(c).userId);
+  const { cliente } = order;
   return created(c, {
     ordenId: order.id,
     numero: order.numero,
     total: order.total,
     estado: order.estado,
+    cliente: cliente && {
+      id: cliente.id,
+      nombre: cliente.nombre,
+      apellido: cliente.apellido,
+      email: cliente.email,
+    },
     vendedorId: order.vendedorId,
     vendedor: order.vendedor,
     payments: order.payments,

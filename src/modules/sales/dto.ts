@@ -49,7 +49,7 @@ export const orderItemSchema = z.object({
 // DTO para crear orden
 export const createOrderDto = z
   .object({
-    clienteId: uuidSchema,
+    clienteId: uuidSchema.optional(),
     sucursalId: uuidSchema,
     canal: OrderChannelEnum,
     tipoDocumento: DocTypeEnum,

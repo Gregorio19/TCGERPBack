@@ -45,6 +45,7 @@ export const chartsService = {
               by: ['clienteId'],
               where: {
                 ...orderCountedWhere,
+                clienteId: { not: null },
                 fechaCreacion: { gte: start, lte: end },
               },
             }),
